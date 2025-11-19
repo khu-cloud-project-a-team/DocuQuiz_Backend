@@ -1,0 +1,11 @@
+// src/core/core.module.ts
+import { Module } from '@nestjs/common';
+import { PdfService } from './pdf.service';
+import { GeminiService } from './gemini.service';
+
+@Module({
+  providers: [PdfService, GeminiService],
+  // 이 서비스들을 다른 모듈(예: QuizModule)에서도 사용할 수 있도록 exports
+  exports: [PdfService, GeminiService],
+})
+export class CoreModule {}

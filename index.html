@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocuQuiz Instant Feedback</title>
+    <style>
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        h1 { color: #2c3e50; text-align: center; margin-bottom: 30px; }
+        
+        /* 상단 점수판 (Sticky) */
+        .score-header { position: sticky; top: 0; background: white; z-index: 100; padding: 15px 20px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: none; justify-content: space-between; align-items: center; margin-bottom: 20px; border: 1px solid #e1e4e8; border-top: none; }
+        .score-text { font-size: 1.2em; font-weight: bold; color: #2c3e50; }
+        
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        
+        /* 입력 폼 스타일 */
+        .form-row { display: flex; gap: 10px; margin-bottom: 15px; }
+        .form-group { margin-bottom: 15px; flex: 1; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; color: #34495e; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        
+        /* 버튼 스타일 */
+        button { background-color: #3498db; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: 600; transition: background 0.2s; width: 100%; }
+        button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        
+        .check-btn { background-color: #27ae60; margin-top: 15px; }
+        .check-btn:hover { background-color: #219150; }
+        
+        .regen-btn { background-color: #e74c3c; width: auto; font-size: 14px; padding: 8px 16px; margin-top: 10px; }
+
+        /* 문제 카드 스타일 */
+        .question-card { border: 1px solid #e1e4e8; padding: 20px; margin-bottom: 20px; border-radius: 8px; background: #fff; position: relative; transition: all 0.3s ease; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; background: #34495e; margin-bottom: 10px; }
+        .q-text { font-size: 1.1em; font-weight: bold; margin-bottom: 15px; }
+        
+        /* 보기(Options) 스타일 */
+        .options-list label { display: block; padding: 12px; border: 1px solid #eee; border-radius: 6px; margin-bottom: 8px; cursor: pointer; font-weight: normal; transition: background 0.2s; }
+        .options-list label:hover { background-color: #f8f9fa; }
+        .options-list input[type="radio"] { margin-right: 10px; transform: scale(1.2); }
+
+        /* 결과(채점) 스타일 */
+        .result-section { display: none; margin-top: 15px; padding-top: 15px; border-top: 2px dashed #eee; background-color: #fcfcfc; padding: 15px; border-radius: 6px; animation: fadeIn 0.5s; }
+        .correct-card { border: 2px solid #2ecc71; background-color: #f0fff4; }
+        .incorrect-card { border: 2px solid #e74c3c; background-color: #fff5f5; }
+        
+        .status-icon { float: right; font-size: 1.5em; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .loader { display: none; text-align: center; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+    <div id="scoreHeader" class="score-header">
+        <span class="score-text">📊 현재 점수: <span id="currentScore">0</span> / <span id="totalCount">0</span></span>
+        <button onclick="location.reload()" style="width: auto; padding: 8px 16px; font-size: 14px; background:#95a5a6;">처음부터 다시</button>
+    </div>
+
+    <h1>🎓 DocuQuiz </h1>
+
+    <div class="card" id="setupCard">
+        <div class="form-group">
+            <label>📂 PDF 파일 절대 경로</label>
+            <input type="text" id="filePath" placeholder="예: C:\Users\Name\project\sample.pdf">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>문항 수</label>
+                <input type="number" id="qCount" value="3" min="1" max="10">
+            </div>
+            <div class="form-group">
+                <label>난이도</label>
+                <select id="difficulty">
+                    <option value="쉬움">쉬움</option>
+                    <option value="보통" selected>보통</option>
+                    <option value="어려움">어려움</option>
+                </select>
+            </div>
+        </div>
+        <button onclick="generateQuiz()" id="genBtn">🚀 퀴즈 생성 시작</button>
+    </div>
+
+    <div id="loader" class="loader">
+        <p>🤖 AI가 문서를 분석하고 문제를 출제 중입니다...</p>
+        <p>(PDF 크기에 따라 10~30초 정도 소요됩니다)</p>
+    </div>
+
+    <div id="questionsContainer"></div>
+
+    <div id="regenArea" class="card" style="display:none; border-left: 5px solid #e74c3c;">
+        <h2>🔄 오답 집중 공략 (재출제)</h2>
+        <div id="regenContainer"></div>
+    </div>
+
+    <script>
+        let currentQuizData = null;
+        let solvedCount = 0;
+        let correctScore = 0;
+
+        // 1. 퀴즈 생성 요청
+        async function generateQuiz() {
+            const filePath = document.getElementById('filePath').value;
+            if (!filePath) { alert('PDF 파일 경로를 입력해주세요.'); return; }
+
+            // UI 초기화
+            document.getElementById('genBtn').disabled = true;
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('setupCard').style.display = 'none'; // 설정창 숨김
+            document.getElementById('questionsContainer').innerHTML = '';
+            
+            // 점수 초기화
+            solvedCount = 0;
+            correctScore = 0;
+            updateScoreBoard(0);
+
+            try {
+                const response = await fetch('http://localhost:3000/quiz/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filePath: filePath,
+                        options: {
+                            questionCount: parseInt(document.getElementById('qCount').value),
+                            types: ["객관식", "주관식", "OX"],
+                            difficulty: document.getElementById('difficulty').value
+                        }
+                    })
+                });
+
+                if (!response.ok) throw new Error(`서버 오류 (${response.status})`);
+
+                const data = await response.json();
+                currentQuizData = data;
+                
+                // 점수판 설정
+                document.getElementById('totalCount').innerText = data.questions.length;
+                document.getElementById('scoreHeader').style.display = 'flex';
+
+                renderQuizInputs(data);
+
+                document.getElementById('loader').style.display = 'none';
+                
+            } catch (error) {
+                alert('오류 발생: ' + error.message);
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('setupCard').style.display = 'block';
+                document.getElementById('genBtn').disabled = false;
+            }
+        }
+
+        // 2. 문제 풀이 화면 렌더링
+        function renderQuizInputs(data) {
+            const container = document.getElementById('questionsContainer');
+            
+            data.questions.forEach((q, index) => {
+                const qDiv = document.createElement('div');
+                qDiv.className = 'question-card';
+                qDiv.id = `card-${index}`;
+
+                let inputHtml = '';
+
+                // 객관식 UI
+                if (q.type === '객관식' && q.options) {
+                    inputHtml = `<div class="options-list">`;
+                    q.options.forEach((opt) => {
+                        inputHtml += `
+                            <label>
+                                <input type="radio" name="q_${index}" value="${opt}">
+                                ${opt}
+                            </label>`;
+                    });
+                    inputHtml += `</div>`;
+                } 
+                // OX 퀴즈 UI
+                else if (q.type === 'OX') {
+                    inputHtml = `<div class="options-list">
+                        <label><input type="radio" name="q_${index}" value="O"> O</label>
+                        <label><input type="radio" name="q_${index}" value="X"> X</label>
+                    </div>`;
+                }
+                // 주관식/단답형 UI
+                else {
+                    inputHtml = `<input type="text" id="input_${index}" placeholder="정답을 입력하세요" style="font-size:1.1em;">`;
+                }
+
+                qDiv.innerHTML = `
+                    <div class="status-icon" id="icon-${index}"></div>
+                    <span class="badge">${q.type}</span> <span class="badge" style="background:#95a5a6">Page ${q.page}</span>
+                    <div class="q-text">Q${index + 1}. ${q.question}</div>
+                    ${inputHtml}
+                    
+                    <button class="check-btn" id="btn-${index}" onclick="checkAnswer(${index})">정답 확인</button>
+
+                    <div id="result-${index}" class="result-section">
+                        <p><strong>정답:</strong> <span style="color:#27ae60; font-weight:bold;">${q.answer}</span></p>
+                        <p><strong>해설:</strong> ${q.explanation}</p>
+                        <div id="regen-btn-${index}"></div>
+                    </div>
+                `;
+                container.appendChild(qDiv);
+            });
+        }
+
+        // 3. [개별 문제] 즉시 채점 로직
+        function checkAnswer(index) {
+            const q = currentQuizData.questions[index];
+            let userAnswer = '';
+
+            // 사용자 입력값 가져오기
+            if (q.type === '객관식' || q.type === 'OX') {
+                const checked = document.querySelector(`input[name="q_${index}"]:checked`);
+                if (!checked) { alert('답을 선택해주세요!'); return; }
+                userAnswer = checked.value;
+            } else {
+                userAnswer = document.getElementById(`input_${index}`).value.trim();
+                if (!userAnswer) { alert('답을 입력해주세요!'); return; }
+            }
+
+            // 정답 비교 (공백 제거, 소문자 변환 후 비교)
+            const isCorrect = userAnswer.replace(/\s+/g, '').toLowerCase() === q.answer.replace(/\s+/g, '').toLowerCase();
+
+            // 점수 업데이트
+            solvedCount++;
+            if (isCorrect) correctScore++;
+            updateScoreBoard(correctScore);
+
+            // UI 업데이트 (카드 스타일 변경)
+            const card = document.getElementById(`card-${index}`);
+            const resultDiv = document.getElementById(`result-${index}`);
+            const btn = document.getElementById(`btn-${index}`);
+            const icon = document.getElementById(`icon-${index}`);
+
+            // 입력 비활성화 (수정 방지)
+            disableInput(index);
+            btn.style.display = 'none'; // 버튼 숨김
+            resultDiv.style.display = 'block'; // 결과창 표시
+
+            if (isCorrect) {
+                card.classList.add('correct-card');
+                icon.innerHTML = '✅';
+                resultDiv.insertAdjacentHTML('afterbegin', `<p style="color:#2ecc71; font-weight:bold;">정답입니다! 🎉</p>`);
+            } else {
+                card.classList.add('incorrect-card');
+                icon.innerHTML = '❌';
+                resultDiv.insertAdjacentHTML('afterbegin', `<p style="color:#e74c3c; font-weight:bold;">아쉽네요. (내 답: ${userAnswer})</p>`);
+                
+                // 틀렸을 때만 재출제 버튼 표시
+                const regenDiv = document.getElementById(`regen-btn-${index}`);
+                regenDiv.innerHTML = `<button class="regen-btn" onclick="regenerateSingle(${index}, '${userAnswer}')">⚡ 이 개념으로 새 문제 도전!</button>`;
+            }
+        }
+
+        function disableInput(index) {
+            const inputs = document.querySelectorAll(`input[name="q_${index}"], #input_${index}`);
+            inputs.forEach(input => input.disabled = true);
+        }
+
+        function updateScoreBoard(score) {
+            document.getElementById('currentScore').innerText = score;
+        }
+
+        // 4. 오답 기반 재출제 요청
+        async function regenerateSingle(index, wrongAnswer) {
+            const originalQ = currentQuizData.questions[index];
+            
+            // 버튼 비활성화 (중복 클릭 방지)
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerText = "생성 중...";
+
+            try {
+                const response = await fetch('http://localhost:3000/quiz/regenerate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify([{
+                        originalQuestion: originalQ,
+                        userAnswer: wrongAnswer,
+                        sourceContext: originalQ.source_context
+                    }])
+                });
+
+                const data = await response.json();
+                renderRegenResult(data);
+
+            } catch (error) {
+                alert('재출제 실패: ' + error);
+            } finally {
+                btn.innerText = "생성 완료";
+            }
+        }
+
+        function renderRegenResult(data) {
+            const container = document.getElementById('regenContainer');
+            
+            if (!data.questions || data.questions.length === 0) {
+                alert("AI가 새 문제를 생성하지 못했습니다.");
+                return;
+            }
+
+            data.questions.forEach((q) => {
+                const qDiv = document.createElement('div');
+                qDiv.className = 'question-card';
+                qDiv.style.borderLeft = "5px solid #e74c3c";
+                qDiv.style.backgroundColor = "#fff5f5";
+                qDiv.innerHTML = `
+                    <span class="badge" style="background:#e74c3c">복습 문제</span>
+                    <div class="q-text">Q. ${q.question}</div>
+                    <details>
+                        <summary style="cursor:pointer; color:#e74c3c; font-weight:bold;">정답 및 해설 보기</summary>
+                        <p style="margin-top:10px;"><strong>정답:</strong> ${q.answer}</p>
+                        <p><strong>해설:</strong> ${q.explanation}</p>
+                    </details>
+                `;
+                container.appendChild(qDiv);
+            });
+
+            document.getElementById('regenArea').style.display = 'block';
+            document.getElementById('regenArea').scrollIntoView({behavior: "smooth"});
+        }
+    </script>
+
+</body>
+</html>
