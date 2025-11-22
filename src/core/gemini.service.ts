@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { RawPdfChunk } from './pdf.service'; // 1단계의 인터페이스 재활용
 
 // Gemini API Key (실제로는 .env 파일 등을 통해 관리해야 합니다)
-const API_KEY = 'API_KEY';
+const API_KEY = 'AIzaSyAWlQoRMeiq5ZS6YrWXIi9aLkZal-1MVUI';
 
 // Gemini가 구조화해줄 데이터 형식 정의
 export interface StructuredPdfChunk {

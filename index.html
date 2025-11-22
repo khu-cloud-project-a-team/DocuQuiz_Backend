@@ -80,6 +80,17 @@
                 </select>
             </div>
         </div>
+
+        <div class="form-group">
+            <label>문제 유형 </label>
+            <div style="display: flex; gap: 15px; background: #f8f9fa; padding: 10px; border-radius: 6px;">
+                <label style="margin:0; font-weight:normal;"><input type="checkbox" class="qType" value="객관식" checked> 객관식</label>
+                <label style="margin:0; font-weight:normal;"><input type="checkbox" class="qType" value="주관식" checked> 주관식</label>
+                <label style="margin:0; font-weight:normal;"><input type="checkbox" class="qType" value="OX" checked> O/X</label>
+                <label style="margin:0; font-weight:normal;"><input type="checkbox" class="qType" value="빈칸" checked> 빈칸</label>
+            </div>
+        </div>
+
         <button onclick="generateQuiz()" id="genBtn">🚀 퀴즈 생성 시작</button>
     </div>
 
@@ -105,6 +116,9 @@
             const filePath = document.getElementById('filePath').value;
             if (!filePath) { alert('PDF 파일 경로를 입력해주세요.'); return; }
 
+            const selectedTypes = Array.from(document.querySelectorAll('.qType:checked')).map(cb => cb.value);
+            if (selectedTypes.length === 0) { alert('문제 유형을 최소 하나는 선택해야 합니다!'); return; }
+
             // UI 초기화
             document.getElementById('genBtn').disabled = true;
             document.getElementById('loader').style.display = 'block';
@@ -124,7 +138,7 @@
                         filePath: filePath,
                         options: {
                             questionCount: parseInt(document.getElementById('qCount').value),
-                            types: ["객관식", "주관식", "OX"],
+                            types: selectedTypes,
                             difficulty: document.getElementById('difficulty').value
                         }
                     })
@@ -182,9 +196,10 @@
                     </div>`;
                 }
                 // 주관식/단답형 UI
-                else {
-                    inputHtml = `<input type="text" id="input_${index}" placeholder="정답을 입력하세요" style="font-size:1.1em;">`;
-                }
+                else { // 주관식, 빈칸
+        const placeholder = q.type === '빈칸' ? '빈칸에 들어갈 말을 입력하세요' : '정답을 입력하세요';
+        inputHtml = `<input type="text" id="input_${index}" placeholder="${placeholder}" style="font-size:1.1em;">`;
+    }
 
                 qDiv.innerHTML = `
                     <div class="status-icon" id="icon-${index}"></div>
