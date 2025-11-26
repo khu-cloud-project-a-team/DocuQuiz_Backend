@@ -5,6 +5,9 @@ import {
   GeminiService,
   StructuredPdfChunk,
 } from '../core/gemini.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Quiz as QuizEntity, Question as QuestionEntity, QuizResult, UserAnswer } from './quiz.entity';
 
 // --- 데이터 형식 정의 (나중에 dto/ 폴더로 이동 가능) ---
 
@@ -28,6 +31,7 @@ export interface RawQuestion {
 
 /** 3. 최종 완성된 퀴즈 형식 */
 export interface Quiz {
+  id?: string; // DB 저장 후 생성된 ID
   title: string;
   questions: RawQuestion[];
 }
@@ -47,7 +51,15 @@ export class QuizService {
   constructor(
     private readonly pdfService: PdfService,
     private readonly geminiService: GeminiService,
-  ) {}
+    @InjectRepository(QuizEntity)
+    private readonly quizRepository: Repository<QuizEntity>,
+    @InjectRepository(QuestionEntity)
+    private readonly questionRepository: Repository<QuestionEntity>,
+    @InjectRepository(QuizResult)
+    private readonly quizResultRepository: Repository<QuizResult>,
+    @InjectRepository(UserAnswer)
+    private readonly userAnswerRepository: Repository<UserAnswer>,
+  ) { }
 
   /**
    * (Public) 퀴즈 생성을 요청하는 메인 메서드
@@ -84,7 +96,50 @@ export class QuizService {
     const finalQuiz = this._packageQuiz(verifiedQuestionBank, options);
     console.log('[Phase 4] 완료. 최종 퀴즈 생성.');
 
-    return finalQuiz;
+    // === 5단계: DB 저장 ===
+    console.log('[Phase 5] DB 저장 시작...');
+    const savedQuiz = await this.quizRepository.save({
+      title: finalQuiz.title,
+      questions: finalQuiz.questions.map(q => ({
+        text: q.question,
+        type: q.type,
+        options: q.options || [],
+        answer: q.answer,
+        explanation: q.explanation,
+        sourceContext: q.source_context,
+      })),
+    });
+    console.log(`[Phase 5] 완료. Quiz ID: ${savedQuiz.id}`);
+
+    return { ...finalQuiz, id: savedQuiz.id };
+  }
+
+  /**
+   * (Public) 퀴즈 ID로 퀴즈 조회
+   */
+  async getQuiz(id: string): Promise<Quiz> {
+    const quiz = await this.quizRepository.findOne({
+      where: { id },
+      relations: ['questions'],
+    });
+
+    if (!quiz) {
+      throw new Error('Quiz not found');
+    }
+
+    return {
+      id: quiz.id,
+      title: quiz.title,
+      questions: quiz.questions.map(q => ({
+        page: 0, // DB에는 page 정보가 없으므로 0 또는 적절한 값
+        type: q.type as any,
+        question: q.text,
+        options: q.options,
+        answer: q.answer,
+        explanation: q.explanation,
+        source_context: q.sourceContext,
+      })),
+    };
   }
 
   /**
@@ -102,7 +157,7 @@ export class QuizService {
     const regenerationJobs = misconceptions.map(item =>
       this._generateSingleRegenQuestion(item),
     );
-    
+
     // 생성된 새 문항들을 수집
     const results = await Promise.all(regenerationJobs);
     results.forEach(q => {
@@ -115,6 +170,64 @@ export class QuizService {
     return {
       title: '나만의 취약점 복습 퀴즈',
       questions: regeneratedQuestions,
+    };
+  }
+
+  /**
+   * (Public) 퀴즈 제출 및 채점
+   * @param quizId 퀴즈 ID
+   * @param answers 사용자가 제출한 답안 목록
+   */
+  async submitQuiz(
+    quizId: string,
+    answers: { questionId: string; selectedAnswer: string }[],
+  ) {
+    // 1. 퀴즈 및 문항 조회
+    const quiz = await this.quizRepository.findOne({
+      where: { id: quizId },
+      relations: ['questions'],
+    });
+
+    if (!quiz) {
+      throw new Error('Quiz not found');
+    }
+
+    let correctCount = 0;
+    const userAnswers: UserAnswer[] = [];
+
+    // 2. 채점 로직
+    for (const answer of answers) {
+      const question = quiz.questions.find(q => q.id === answer.questionId);
+      if (!question) continue;
+
+      // 정답 비교 (간단한 문자열 비교, 대소문자 무시 등 로직 추가 가능)
+      const isCorrect = question.answer.trim() === answer.selectedAnswer.trim();
+      if (isCorrect) correctCount++;
+
+      const userAnswer = this.userAnswerRepository.create({
+        questionId: question.id,
+        selectedAnswer: answer.selectedAnswer,
+        isCorrect,
+      });
+      userAnswers.push(userAnswer);
+    }
+
+    // 3. 결과 저장
+    const quizResult = this.quizResultRepository.create({
+      quiz,
+      score: (correctCount / quiz.questions.length) * 100, // 100점 만점 환산
+      totalQuestions: quiz.questions.length,
+      correctQuestions: correctCount,
+      answers: userAnswers,
+    });
+
+    await this.quizResultRepository.save(quizResult);
+
+    return {
+      id: quizResult.id,
+      score: quizResult.score,
+      correctQuestions: quizResult.correctQuestions,
+      totalQuestions: quizResult.totalQuestions,
     };
   }
 
@@ -304,12 +417,12 @@ export class QuizService {
     try {
       // 2. GeminiService를 통해 LLM 호출
       const responseText = await this.geminiService.generateContent(prompt);
-      
+
       const jsonText = responseText
         .replace(/```json/g, '')
         .replace(/```/g, '')
         .trim();
-      
+
       // 3. 새 문항 파싱
       return JSON.parse(jsonText);
 

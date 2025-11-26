@@ -1,10 +1,8 @@
 // src/core/gemini.service.ts
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { RawPdfChunk } from './pdf.service'; // 1단계의 인터페이스 재활용
-
-// Gemini API Key (실제로는 .env 파일 등을 통해 관리해야 합니다)
-const API_KEY = 'AIzaSyAWlQoRMeiq5ZS6YrWXIi9aLkZal-1MVUI';
 
 // Gemini가 구조화해줄 데이터 형식 정의
 export interface StructuredPdfChunk {
@@ -18,11 +16,16 @@ export class GeminiService {
   private genAI: GoogleGenerativeAI;
   private model;
 
-  constructor() {
-    this.genAI = new GoogleGenerativeAI(API_KEY);
+  constructor(private configService: ConfigService) {
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY is missing');
+    }
+    this.genAI = new GoogleGenerativeAI(apiKey);
     // 퀴즈 생성을 위한 고성능 모델 사용
     this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   }
+
   // --- ⬇️ [신규] 퀴즈 서비스가 호출할 공용 메서드 ⬇️ ---
   /**
    * (Public) Gemini API에 프롬프트를 보내고 텍스트 응답을 받습니다.
@@ -35,8 +38,8 @@ export class GeminiService {
       const response = result.response;
       return response.text(); // 순수 텍스트만 반환
     } catch (error) {
-      console.error('Gemini API 호출 중 오류:', error);
-      throw new Error('Gemini 콘텐츠 생성에 실패했습니다.');
+      console.error('Gemini API 호출 중 오류:', JSON.stringify(error, null, 2));
+      throw new Error(`Gemini 콘텐츠 생성 실패: ${error.message}`);
     }
   }
 
@@ -53,7 +56,11 @@ export class GeminiService {
       당신은 PDF 문서를 의미론적으로 분석하는 AI입니다.
       페이지 번호(PAGE X)와 원시 텍스트가 덩어리로 주어집니다.
       이 텍스트를 분석하여 "header"(제목), "paragraph"(문단), "list"(목록), "table"(표), "unknown"(기타) 유형으로 분류해야 합니다.
-      원본 페이지 번호를 반드시 유지해야 하며, 지정된 JSON 배열 형식으로만 응답해야 합니다.
+      
+      [분석 규칙]
+      1. **헤더/푸터 제외**: 페이지 상단/하단의 단순 페이지 번호, 반복되는 문서 제목, 날짜 등은 분석에서 제외하거나 "unknown"으로 처리하지 말고 아예 출력하지 마십시오.
+      2. **의미 단위**: 문장이 페이지를 넘어가는 경우, 문맥을 파악하여 적절히 문단으로 합치거나 분리하십시오.
+      3. **JSON 포맷**: 원본 페이지 번호를 반드시 유지해야 하며, 지정된 JSON 배열 형식으로만 응답해야 합니다.
 
       [출력 JSON 형식 예시]
       [
@@ -74,12 +81,12 @@ export class GeminiService {
     try {
       const result = await this.model.generateContent(prompt);
       const response = result.response;
-      
+
       // Gemini가 반환한 텍스트에서 JSON 부분만 추출
       const jsonText = response.text()
-                       .replace(/```json/g, '')
-                       .replace(/```/g, '')
-                       .trim();
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
 
       // 4. JSON 파싱
       const structuredData: StructuredPdfChunk[] = JSON.parse(jsonText);
@@ -87,8 +94,8 @@ export class GeminiService {
       return structuredData;
 
     } catch (err) {
-      console.error('Gemini API 호출 중 오류 발생:', err);
-      throw new Error('Gemini 텍스트 구조화에 실패했습니다.');
+      console.error('Gemini API 호출 중 오류 발생:', JSON.stringify(err, null, 2));
+      throw new Error(`Gemini 텍스트 구조화 실패: ${err.message}`);
     }
   }
 }
