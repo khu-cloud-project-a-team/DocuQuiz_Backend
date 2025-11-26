@@ -1,4 +1,3 @@
-// src/quiz/quiz.service.ts
 import { Injectable } from '@nestjs/common';
 import { PdfService } from '../core/pdf.service';
 import {
@@ -20,6 +19,7 @@ export interface QuizOptions {
 
 /** 2. LLM이 생성할 '원시 문항'의 형식 */
 export interface RawQuestion {
+  id?: string; // DB 저장 후 생성된 ID (선택적)
   page: number;
   type: '객관식' | '주관식' | 'OX' | '빈칸';
   question: string;
@@ -76,6 +76,11 @@ export class QuizService {
     const structuredChunks = await this.geminiService.structureText(rawChunks);
     console.log('[Phase 1] 완료. 구조화된 청크 생성됨.');
 
+    // === 1.5단계: 퀴즈 제목 생성 ===
+    console.log('[Phase 1.5] 퀴즈 제목 생성 중...');
+    const generatedTitle = await this.geminiService.generateTitle(structuredChunks);
+    console.log(`[Phase 1.5] 생성된 제목: ${generatedTitle}`);
+
     // === 2단계: 퀴즈 생성 (LLM 1차 호출) ===
     console.log('[Phase 2] 퀴즈 생성 시작...');
     const rawQuestionBank = await this._generateQuestionsFromChunks(
@@ -93,12 +98,12 @@ export class QuizService {
 
     // === 4단계: 퀴즈 패키징 ===
     console.log('[Phase 4] 퀴즈 패키징 시작...');
-    const finalQuiz = this._packageQuiz(verifiedQuestionBank, options);
+    const finalQuiz = this._packageQuiz(verifiedQuestionBank, options, generatedTitle);
     console.log('[Phase 4] 완료. 최종 퀴즈 생성.');
 
     // === 5단계: DB 저장 ===
     console.log('[Phase 5] DB 저장 시작...');
-    const savedQuiz = await this.quizRepository.save({
+    const quizToSave = this.quizRepository.create({
       title: finalQuiz.title,
       questions: finalQuiz.questions.map(q => ({
         text: q.question,
@@ -109,9 +114,24 @@ export class QuizService {
         sourceContext: q.source_context,
       })),
     });
+    const savedQuiz = await this.quizRepository.save(quizToSave);
     console.log(`[Phase 5] 완료. Quiz ID: ${savedQuiz.id}`);
 
-    return { ...finalQuiz, id: savedQuiz.id };
+    // 중요: 저장된 퀴즈의 ID와 문항들의 ID를 포함하여 반환해야 함
+    return {
+      id: savedQuiz.id,
+      title: savedQuiz.title,
+      questions: savedQuiz.questions.map(q => ({
+        id: q.id, // 여기서 ID 반환 필수
+        page: 0,
+        type: q.type as any,
+        question: q.text,
+        options: q.options,
+        answer: q.answer,
+        explanation: q.explanation,
+        source_context: q.sourceContext,
+      })),
+    };
   }
 
   /**
@@ -131,7 +151,8 @@ export class QuizService {
       id: quiz.id,
       title: quiz.title,
       questions: quiz.questions.map(q => ({
-        page: 0, // DB에는 page 정보가 없으므로 0 또는 적절한 값
+        id: q.id,
+        page: 0,
         type: q.type as any,
         question: q.text,
         options: q.options,
@@ -213,10 +234,13 @@ export class QuizService {
     }
 
     // 3. 결과 저장
+    const totalQuestions = quiz.questions.length;
+    const score = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
+
     const quizResult = this.quizResultRepository.create({
       quiz,
-      score: (correctCount / quiz.questions.length) * 100, // 100점 만점 환산
-      totalQuestions: quiz.questions.length,
+      score: Math.round(score), // 정수로 저장
+      totalQuestions,
       correctQuestions: correctCount,
       answers: userAnswers,
     });
@@ -354,6 +378,7 @@ export class QuizService {
   private _packageQuiz(
     verifiedQuestions: RawQuestion[],
     options: QuizOptions,
+    title: string,
   ): Quiz {
     // 1. 요청한 유형(types)으로 필터링
     let packagedQuestions = verifiedQuestions.filter(q =>
@@ -370,7 +395,7 @@ export class QuizService {
     // (추가 로직: 명세서의 '동일 토픽 연속 출제 제한' 등 알고리즘 구현)
 
     return {
-      title: '나만의 맞춤 퀴즈', // (향후 PDF 제목 등으로 대체)
+      title: title,
       questions: packagedQuestions,
     };
   }

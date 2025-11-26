@@ -1,7 +1,9 @@
-// src/core/pdf.service.ts
 import { Injectable } from '@nestjs/common';
-// TextItem, TextMarkedContent 같은 타입 임포트는 제거합니다.
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import axios from 'axios';
+import { S3Service } from '../aws/s3.service';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { Readable } from 'stream';
 
 export interface RawPdfChunk {
   page: number;
@@ -10,9 +12,79 @@ export interface RawPdfChunk {
 
 @Injectable()
 export class PdfService {
+  constructor(private readonly s3Service: S3Service) { }
+
   async extractRawText(filePath: string): Promise<RawPdfChunk[]> {
     console.log(`PDF 분석 시작: ${filePath}`);
-    const loadingTask = getDocument(filePath);
+
+    let data: string | Uint8Array = filePath;
+
+    // URL인 경우 처리
+    if (filePath.startsWith('http')) {
+      // S3 URL인지 확인 (간단한 체크)
+      const bucketName = this.s3Service.getBucketName();
+      const isS3Url = filePath.includes('s3') && filePath.includes('amazonaws.com');
+
+      if (isS3Url) {
+        try {
+          console.log('S3 URL 감지됨. AWS SDK로 다운로드 시도...');
+
+          const url = new URL(filePath);
+          // pathname은 /key 형태이므로 앞의 / 제거
+          const key = url.pathname.substring(1);
+
+          console.log(`S3 Key 추출: ${key}`);
+
+          const command = new GetObjectCommand({
+            Bucket: bucketName,
+            Key: key,
+          });
+
+          const s3Response = await this.s3Service.getS3Client().send(command);
+
+          // Stream to Buffer
+          const stream = s3Response.Body as Readable;
+          const chunks: Uint8Array[] = [];
+          for await (const chunk of stream) {
+            chunks.push(chunk);
+          }
+          const buffer = Buffer.concat(chunks);
+
+          // Buffer를 순수 Uint8Array로 변환 (pdfjs-dist 요구사항)
+          data = new Uint8Array(buffer);
+
+          console.log('S3 파일 다운로드 완료.');
+
+        } catch (s3Error) {
+          console.error('S3 다운로드 실패, 일반 HTTP 요청으로 전환:', s3Error);
+          // S3 실패 시 일반 HTTP로 재시도 (Public일 경우)
+          try {
+            const response = await axios.get(filePath, { responseType: 'arraybuffer' });
+            data = new Uint8Array(response.data);
+          } catch (httpError) {
+            throw new Error('PDF 파일을 다운로드할 수 없습니다.');
+          }
+        }
+      } else {
+        // 일반 URL
+        try {
+          console.log('일반 URL 감지됨. 파일 다운로드 중...');
+          const response = await axios.get(filePath, { responseType: 'arraybuffer' });
+          data = new Uint8Array(response.data);
+          console.log('파일 다운로드 완료.');
+        } catch (downloadError) {
+          console.error('파일 다운로드 실패:', downloadError);
+          throw new Error('PDF 파일을 다운로드할 수 없습니다.');
+        }
+      }
+    }
+
+    // 최종적으로 data가 Buffer라면 Uint8Array로 변환
+    if (Buffer.isBuffer(data)) {
+      data = new Uint8Array(data);
+    }
+
+    const loadingTask = getDocument(data);
 
     try {
       const pdf = await loadingTask.promise;
@@ -23,25 +95,14 @@ export class PdfService {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
 
-        // --- ⬇️ 여기가 수정된 부분입니다 ⬇️ ---
-
-        // 1. 텍스트를 담을 빈 배열을 생성합니다.
         const strings: string[] = [];
-        
-        // 2. textContent.items를 for...of 루프로 순회합니다.
         for (const item of textContent.items) {
-          // 3. 'str' 속성이 객체에 있는지 확인합니다. (타입 가드)
           if ('str' in item) {
-            // 4. 'str'이 있으면 item.str을 배열에 추가합니다.
             strings.push(item.str);
           }
-          // 'str'이 없는 TextMarkedContent는 무시됩니다.
         }
 
-        // 5. 배열을 합쳐 pageText를 만듭니다.
         const pageText = strings.join(' ');
-
-        // --- ⬆️ 여기까지 수정된 부분입니다 ⬆️ ---
 
         allTextChunks.push({
           page: i,

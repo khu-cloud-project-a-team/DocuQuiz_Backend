@@ -1,8 +1,7 @@
-// src/core/gemini.service.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { RawPdfChunk } from './pdf.service'; // 1단계의 인터페이스 재활용
+import { RawPdfChunk } from './pdf.service';
 
 // Gemini가 구조화해줄 데이터 형식 정의
 export interface StructuredPdfChunk {
@@ -26,7 +25,6 @@ export class GeminiService {
     this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   }
 
-  // --- ⬇️ [신규] 퀴즈 서비스가 호출할 공용 메서드 ⬇️ ---
   /**
    * (Public) Gemini API에 프롬프트를 보내고 텍스트 응답을 받습니다.
    * @param prompt - LLM에 보낼 전체 프롬프트 문자열
@@ -40,6 +38,38 @@ export class GeminiService {
     } catch (error) {
       console.error('Gemini API 호출 중 오류:', JSON.stringify(error, null, 2));
       throw new Error(`Gemini 콘텐츠 생성 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * 구조화된 텍스트를 기반으로 퀴즈 제목을 생성합니다.
+   * @param chunks - 구조화된 텍스트 청크
+   */
+  async generateTitle(chunks: StructuredPdfChunk[]): Promise<string> {
+    // 제목 생성을 위해 앞부분(최대 3페이지)만 사용
+    const context = chunks
+      .filter(c => c.page <= 3)
+      .map(c => c.content)
+      .join('\n');
+
+    const prompt = `
+      다음은 문서의 앞부분 내용입니다:
+      ${context}
+
+      위 내용을 바탕으로 이 문서의 내용을 가장 잘 요약하는 '퀴즈 제목'을 1개만 생성해 주세요.
+      
+      [조건]
+      1. 20자 이내의 한국어로 작성하세요.
+      2. "퀴즈", "시험" 같은 단어는 포함하지 마세요. (예: "인공지능의 역사", "광합성의 원리")
+      3. 따옴표나 부가 설명 없이 제목 텍스트만 출력하세요.
+    `;
+
+    try {
+      const title = await this.generateContent(prompt);
+      return title.trim();
+    } catch (error) {
+      console.error('제목 생성 중 오류:', error);
+      return '생성된 퀴즈'; // 기본값
     }
   }
 
