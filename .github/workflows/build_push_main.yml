@@ -1,0 +1,181 @@
+name: build_push_main
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Deploy to AWS ECR
+    runs-on: ubuntu-latest
+    outputs:
+      image_version: ${{ steps.extract_version.outputs.VERSION}}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Extract version from github hash
+        id: extract_version
+        run: |
+          echo "commit hash : $(git rev-parse --short HEAD)"
+          echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Docker Buildx
+        id: setup_buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build, tag, and push backend image to Amazon ECR
+        id: build_image
+        uses: docker/build-push-action@v5
+        env:
+          ECR_REGISTRY : ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.AWS_ECR_REPOSITORY_NAME}}
+          IMAGE_TAG: ${{ steps.extract_version.outputs.VERSION}}
+        with:
+          context: .
+          push: true
+          tags: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Send Build Failed Notification
+        id: send_build_failed_notification
+        if: failure()
+        uses: tyrrrz/action-http-request@master
+        with:
+          url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          method: POST
+          headers: |
+            Content-Type: application/json
+          body: |
+            {
+              "content": null,
+              "embeds": [
+                {
+                  "description": "서버 빌드 실패 - ${{ steps.extract_version.outputs.VERSION}}",
+                  "color": null,
+                  "author": {
+                    "name": "Github Action Ci/CD",
+                    "icon_url": "https://cdn-icons-png.flaticon.com/512/5203/5203752.png"
+                  },
+                  "footer": {
+                    "text": "api.docuquiz.win"
+                  },
+                  "thumbnail": {
+                    "url": "https://img.freepik.com/premium-vector/cross-icon-vector-design-templates_1172029-5244.jpg"
+                  }
+                }
+              ],
+              "attachments": []
+            }
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        id: checkout_code
+        uses: actions/checkout@v4
+
+      - name: SCP to EC2
+        id: scp_to_ec2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "./docker-compose.yml, ./nginx.conf"
+          target: /home/ec2-user
+
+      - name: SSH to EC2 and Deploy
+        id: ssh_to_ec2_and_deploy
+        uses: appleboy/ssh-action@master
+        env:
+          AWS_ECR_REGISTRY_NAME: ${{ secrets.AWS_ECR_REGISTRY_NAME }}
+          AWS_ECR_REPOSITORY_NAME: ${{ secrets.AWS_ECR_REPOSITORY_NAME }}
+          AWS_ECR_REGION: ap-northeast-2
+          VERSION: ${{ needs.build.outputs.image_version }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: AWS_ECR_REGISTRY_NAME,AWS_ECR_REPOSITORY_NAME,AWS_ECR_REGION,VERSION
+          script: |
+            aws ecr get-login-password --region $AWS_ECR_REGION | docker login --username AWS --password-stdin $AWS_ECR_REGISTRY_NAME
+            cd /home/ec2-user
+            export IMAGE_URL=$AWS_ECR_REGISTRY_NAME/$AWS_ECR_REPOSITORY_NAME:$VERSION
+            sed -i "s/^AWS_ECR_BACKEND_IMAGE=.*/AWS_ECR_BACKEND_IMAGE=${IMAGE_URL//\//\\/}/" .env
+            docker-compose pull
+            docker-compose up -d
+
+      - name: Send Deployment Notification
+        id: send_deployment_notification
+        if: success()
+        uses: tyrrrz/action-http-request@master
+        with:
+          url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          method: POST
+          headers: |
+            Content-Type: application/json
+          body: |
+            {
+              "content": null,
+              "embeds": [
+                {
+                  "description": "서버 배포 완료 - ${{ needs.build.outputs.image_version}}",
+                  "color": null,
+                  "author": {
+                    "name": "Github Action Ci/CD",
+                    "icon_url": "https://cdn-icons-png.flaticon.com/512/5203/5203752.png"
+                  },
+                  "footer": {
+                    "text": "api.docuquiz.win"
+                  },
+                  "thumbnail": {
+                    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Eo_circle_green_checkmark.svg/1200px-Eo_circle_green_checkmark.svg.png"
+                  }
+                }
+              ],
+              "attachments": []
+            }
+
+      - name: Send Deployment Failed Notification
+        id: send_deployment_failed_notification
+        if: failure()
+        uses: tyrrrz/action-http-request@master
+        with:
+          url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          method: POST
+          headers: |
+            Content-Type: application/json
+          body: |
+            {
+              "content": null,
+              "embeds": [
+                {
+                  "description": "서버 배포 실패 - ${{ needs.build.outputs.image_version}}",
+                  "color": null,
+                  "author": {
+                    "name": "Github Action Ci/CD",
+                    "icon_url": "https://cdn-icons-png.flaticon.com/512/5203/5203752.png"
+                  },
+                  "footer": {
+                    "text": "api.docuquiz.win"
+                  },
+                  "thumbnail": {
+                    "url": "https://img.freepik.com/premium-vector/cross-icon-vector-design-templates_1172029-5244.jpg"
+                  }
+                }
+              ],
+              "attachments": []
+            }

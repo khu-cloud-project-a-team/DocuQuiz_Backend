@@ -1,0 +1,17 @@
+services:
+  nginx:
+    image: nginx:latest
+    container_name: docuquiz_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+  backend:
+    container_name: docuquiz_backend
+    tty: true
+    image: ${AWS_ECR_BACKEND_IMAGE}
+    env_file:
+      - .env
