@@ -42,4 +42,7 @@ export class FileService {
 
         return this.fileRepository.save(newFile);
     }
+    async findAll(): Promise<FileEntity[]> {
+        return this.fileRepository.find({ order: { createdAt: 'DESC' } });
+    }
 }

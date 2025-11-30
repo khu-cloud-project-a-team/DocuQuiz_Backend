@@ -3,6 +3,7 @@ import {
     Post,
     UploadedFile,
     UseInterceptors,
+    Get,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FileService } from './file.service';
@@ -31,5 +32,11 @@ export class FileController {
     @UseInterceptors(FileInterceptor('file'))
     async uploadFile(@UploadedFile() file: Express.Multer.File) {
         return this.fileService.uploadFile(file);
+    }
+    @Get()
+    @ApiOperation({ summary: '파일 목록 조회', description: '업로드된 모든 파일 목록을 반환합니다.' })
+    @ApiResponse({ status: 200, description: '파일 목록 조회 성공' })
+    async getFiles() {
+        return this.fileService.findAll();
     }
 }

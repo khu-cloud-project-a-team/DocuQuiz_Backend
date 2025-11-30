@@ -5,10 +5,12 @@ import { QuizController } from './quiz.controller';
 import { QuizService } from './quiz.service';
 import { CoreModule } from '../core/core.module';
 import { Quiz, Question, QuizResult, UserAnswer } from './quiz.entity';
+import { WrongAnswerNote, WrongAnswerItem } from './wrong-answer-note.entity';
+import { FileEntity } from '../file/file.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Quiz, Question, QuizResult, UserAnswer]),
+    TypeOrmModule.forFeature([Quiz, Question, QuizResult, UserAnswer, WrongAnswerNote, WrongAnswerItem, FileEntity]),
     CoreModule
   ],
   controllers: [QuizController],

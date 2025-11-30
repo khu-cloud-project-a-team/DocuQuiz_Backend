@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, OneToOne, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { FileEntity } from '../file/file.entity';
 
 @Entity()
 export class Quiz {
@@ -7,6 +8,19 @@ export class Quiz {
 
     @Column()
     title: string;
+
+    @Column({ default: false })
+    isRegeneratedQuiz: boolean;
+
+    @Column({ nullable: true })
+    sourceNoteId: string;
+
+    @Column('text', { nullable: true })
+    weaknessAnalysis: string;
+
+    @ManyToOne(() => FileEntity, { nullable: true })
+    @JoinColumn({ name: 'sourceFileId' })
+    sourceFile: FileEntity;
 
     @CreateDateColumn()
     createdAt: Date;
@@ -66,6 +80,9 @@ export class QuizResult {
 
     @OneToMany(() => UserAnswer, (answer) => answer.quizResult, { cascade: true })
     answers: UserAnswer[];
+
+    @OneToOne('WrongAnswerNote', 'quizResult', { nullable: true })
+    wrongAnswerNote: any;
 }
 
 @Entity()
