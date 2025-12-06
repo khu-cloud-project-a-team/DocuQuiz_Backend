@@ -68,39 +68,38 @@ export class QuizService {
     private readonly pdfChunkRepository: Repository<PdfChunkEntity>,
   ) { }
 
-  async generateQuiz(filePath: string, options: QuizOptions): Promise<Quiz> {
-    // 1:1 제약조건: 이미 해당 파일에 대한 퀴즈가 존재하면 기존 퀴즈 반환
-    const sourceFile = await this.fileRepository.findOne({ where: { s3Url: filePath } });
-    if (sourceFile) {
-      const existingQuiz = await this.quizRepository.findOne({
-        where: { sourceFile: { id: sourceFile.id }, isRegeneratedQuiz: false },
-        relations: ['questions', 'sourceFile']
-      });
-
-      if (existingQuiz) {
-        console.log(`[Constraint] 기존 퀴즈 반환 (ID: ${existingQuiz.id})`);
-        return {
-          id: existingQuiz.id,
-          title: existingQuiz.title,
-          questions: existingQuiz.questions.map(q => ({
-            id: q.id,
-            page: 0,
-            type: q.type as any,
-            question: q.text,
-            options: q.options,
-            answer: q.answer,
-            explanation: q.explanation,
-            source_context: q.sourceContext,
-          })),
-        };
-      }
-    }
-
-    console.log('[Phase 1] DB에서 구조화된 청크 조회 중...');
-    // 파일 ID로 청크 조회 (sourceFile이 반드시 존재한다고 가정 - 위에서 조회했으므로)
+  async generateQuiz(fileId: string, options: QuizOptions): Promise<Quiz> {
+    // 파일 조회
+    const sourceFile = await this.fileRepository.findOne({ where: { id: fileId } });
     if (!sourceFile) {
       throw new Error('파일 정보를 찾을 수 없습니다.');
     }
+
+    // 1:1 제약조건: 이미 해당 파일에 대한 퀴즈가 존재하면 기존 퀴즈 반환
+    const existingQuiz = await this.quizRepository.findOne({
+      where: { sourceFile: { id: sourceFile.id }, isRegeneratedQuiz: false },
+      relations: ['questions', 'sourceFile']
+    });
+
+    if (existingQuiz) {
+      console.log(`[Constraint] 기존 퀴즈 반환 (ID: ${existingQuiz.id})`);
+      return {
+        id: existingQuiz.id,
+        title: existingQuiz.title,
+        questions: existingQuiz.questions.map(q => ({
+          id: q.id,
+          page: 0,
+          type: q.type as any,
+          question: q.text,
+          options: q.options,
+          answer: q.answer,
+          explanation: q.explanation,
+          source_context: q.sourceContext,
+        })),
+      };
+    }
+
+    console.log('[Phase 1] DB에서 구조화된 청크 조회 중...');
 
     const storedChunks = await this.pdfChunkRepository.find({
       where: { file: { id: sourceFile.id } },

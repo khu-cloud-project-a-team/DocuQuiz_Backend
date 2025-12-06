@@ -60,5 +60,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Test scripts
 test-*.js
-#check-db.js
+check-*.js
+clear-*.js
 reproduce-issue.js

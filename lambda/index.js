@@ -45,16 +45,28 @@ exports.handler = async (event) => {
         const client = await getDbClient();
 
         // file_entity에서 fileId 찾기 (s3Key로 조회)
-        // 주의: 백엔드가 먼저 file_entity를 생성했다고 가정함.
-        // 만약 람다가 너무 빨리 돌면 파일이 없을 수 있으므로 재시도 로직이 필요할 수 있음.
-        const fileRes = await client.query('SELECT id FROM file_entity WHERE "s3Key" = $1', [key]);
+        // confirmUpload API가 호출되어 file_entity가 생성될 때까지 대기
+        let fileId = null;
+        const maxRetries = 5;
+        const retryDelay = 2000; // 2초
 
-        if (fileRes.rows.length === 0) {
-            console.log(`File not found in DB for key: ${key}. Skipping...`);
-            // 백엔드가 아직 저장을 안 했을 수 있음. 에러를 던져서 람다가 재시도하게 하거나 종료.
+        for (let i = 0; i < maxRetries; i++) {
+            const fileRes = await client.query('SELECT id FROM file_entity WHERE "s3Key" = $1', [key]);
+
+            if (fileRes.rows.length > 0) {
+                fileId = fileRes.rows[0].id;
+                console.log(`File found in DB (attempt ${i + 1}): ${fileId}`);
+                break;
+            }
+
+            console.log(`File not found (attempt ${i + 1}/${maxRetries}), waiting ${retryDelay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+
+        if (!fileId) {
+            console.error(`File entity not found after ${maxRetries} attempts for key: ${key}`);
             throw new Error(`File entity not found for key: ${key}`);
         }
-        const fileId = fileRes.rows[0].id;
 
         // 청크 저장
         for (const chunk of structuredChunks) {

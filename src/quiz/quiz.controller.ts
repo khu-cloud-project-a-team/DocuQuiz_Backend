@@ -15,8 +15,8 @@ class QuizOptionsDto {
 }
 
 class GenerateQuizDto {
-  @ApiProperty({ description: 'PDF 파일 경로 (또는 S3 URL)', example: 'https://example.com/file.pdf' })
-  filePath: string;
+  @ApiProperty({ description: '파일 DB ID', example: 'uuid-...' })
+  fileId: string;
 
   @ApiProperty({ description: '퀴즈 옵션', type: QuizOptionsDto })
   options: QuizOptionsDto;
@@ -55,9 +55,8 @@ export class QuizController {
   @ApiOperation({ summary: '퀴즈 생성', description: 'PDF 파일을 기반으로 퀴즈를 생성합니다.' })
   @ApiResponse({ status: 201, description: '퀴즈 생성 성공' })
   async generateQuiz(@Body() generateQuizDto: GenerateQuizDto) {
-    const { filePath, options } = generateQuizDto;
-    // filePath는 S3 URL 또는 로컬 경로
-    return this.quizService.generateQuiz(filePath, options);
+    const { fileId, options } = generateQuizDto;
+    return this.quizService.generateQuiz(fileId, options);
   }
 
   /**
