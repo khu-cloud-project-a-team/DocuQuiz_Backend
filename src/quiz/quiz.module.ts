@@ -7,10 +7,20 @@ import { CoreModule } from '../core/core.module';
 import { Quiz, Question, QuizResult, UserAnswer } from './quiz.entity';
 import { WrongAnswerNote, WrongAnswerItem } from './wrong-answer-note.entity';
 import { FileEntity } from '../file/file.entity';
+import { PdfChunkEntity } from '../core/pdf-chunk.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Quiz, Question, QuizResult, UserAnswer, WrongAnswerNote, WrongAnswerItem, FileEntity]),
+    TypeOrmModule.forFeature([
+      Quiz,
+      Question,
+      QuizResult,
+      UserAnswer,
+      WrongAnswerNote,
+      WrongAnswerItem,
+      FileEntity,
+      PdfChunkEntity
+    ]),
     CoreModule
   ],
   controllers: [QuizController],

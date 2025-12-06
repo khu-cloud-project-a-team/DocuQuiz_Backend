@@ -4,6 +4,7 @@ import { GeminiService, StructuredPdfChunk } from '../core/gemini.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Quiz as QuizEntity, Question as QuestionEntity, QuizResult, UserAnswer } from './quiz.entity';
+import { PdfChunkEntity } from '../core/pdf-chunk.entity';
 import { WrongAnswerNote, WrongAnswerItem } from './wrong-answer-note.entity';
 import { FileEntity } from '../file/file.entity';
 
@@ -63,6 +64,8 @@ export class QuizService {
     private readonly wrongAnswerItemRepository: Repository<WrongAnswerItem>,
     @InjectRepository(FileEntity)
     private readonly fileRepository: Repository<FileEntity>,
+    @InjectRepository(PdfChunkEntity)
+    private readonly pdfChunkRepository: Repository<PdfChunkEntity>,
   ) { }
 
   async generateQuiz(filePath: string, options: QuizOptions): Promise<Quiz> {
@@ -93,10 +96,27 @@ export class QuizService {
       }
     }
 
-    console.log('[Phase 1] PDF 분석 및 구조화 시작...');
-    const rawChunks = await this.pdfService.extractRawText(filePath);
-    const structuredChunks = await this.geminiService.structureText(rawChunks);
-    console.log('[Phase 1] 완료. 구조화된 청크 생성됨.');
+    console.log('[Phase 1] DB에서 구조화된 청크 조회 중...');
+    // 파일 ID로 청크 조회 (sourceFile이 반드시 존재한다고 가정 - 위에서 조회했으므로)
+    if (!sourceFile) {
+      throw new Error('파일 정보를 찾을 수 없습니다.');
+    }
+
+    const storedChunks = await this.pdfChunkRepository.find({
+      where: { file: { id: sourceFile.id } },
+      order: { pageNumber: 'ASC' }
+    });
+
+    if (storedChunks.length === 0) {
+      throw new Error('분석된 PDF 데이터가 없습니다. 파일을 다시 업로드해주세요.');
+    }
+
+    const structuredChunks: StructuredPdfChunk[] = storedChunks.map(chunk => ({
+      page: chunk.pageNumber,
+      content: chunk.content,
+      type: chunk.type as any // DB에 저장된 타입 사용
+    }));
+    console.log(`[Phase 1] 완료. ${structuredChunks.length}개의 청크 로드됨.`);
 
     console.log('[Phase 1.5] 퀴즈 제목 생성 중...');
     const generatedTitle = await this.geminiService.generateTitle(structuredChunks);

@@ -14,67 +14,73 @@ export interface RawPdfChunk {
 export class PdfService {
   constructor(private readonly s3Service: S3Service) { }
 
-  async extractRawText(filePath: string): Promise<RawPdfChunk[]> {
-    console.log(`PDF 분석 시작: ${filePath}`);
+  async extractRawText(input: string | Buffer): Promise<RawPdfChunk[]> {
+    console.log(`PDF 분석 시작`);
 
-    let data: string | Uint8Array = filePath;
+    let data: string | Uint8Array | Buffer = input;
 
-    // URL인 경우 처리
-    if (filePath.startsWith('http')) {
-      // S3 URL인지 확인 (간단한 체크)
-      const bucketName = this.s3Service.getBucketName();
-      const isS3Url = filePath.includes('s3') && filePath.includes('amazonaws.com');
+    // 문자열(파일 경로/URL)인 경우 처리
+    if (typeof input === 'string') {
+      const filePath = input;
+      console.log(`파일 경로: ${filePath}`);
 
-      if (isS3Url) {
-        try {
-          console.log('S3 URL 감지됨. AWS SDK로 다운로드 시도...');
+      // URL인 경우 처리
+      if (filePath.startsWith('http')) {
+        // S3 URL인지 확인 (간단한 체크)
+        const bucketName = this.s3Service.getBucketName();
+        const isS3Url = filePath.includes('s3') && filePath.includes('amazonaws.com');
 
-          const url = new URL(filePath);
-          // pathname은 /key 형태이므로 앞의 / 제거
-          const key = url.pathname.substring(1);
-
-          console.log(`S3 Key 추출: ${key}`);
-
-          const command = new GetObjectCommand({
-            Bucket: bucketName,
-            Key: key,
-          });
-
-          const s3Response = await this.s3Service.getS3Client().send(command);
-
-          // Stream to Buffer
-          const stream = s3Response.Body as Readable;
-          const chunks: Uint8Array[] = [];
-          for await (const chunk of stream) {
-            chunks.push(chunk);
-          }
-          const buffer = Buffer.concat(chunks);
-
-          // Buffer를 순수 Uint8Array로 변환 (pdfjs-dist 요구사항)
-          data = new Uint8Array(buffer);
-
-          console.log('S3 파일 다운로드 완료.');
-
-        } catch (s3Error) {
-          console.error('S3 다운로드 실패, 일반 HTTP 요청으로 전환:', s3Error);
-          // S3 실패 시 일반 HTTP로 재시도 (Public일 경우)
+        if (isS3Url) {
           try {
+            console.log('S3 URL 감지됨. AWS SDK로 다운로드 시도...');
+
+            const url = new URL(filePath);
+            // pathname은 /key 형태이므로 앞의 / 제거
+            const key = url.pathname.substring(1);
+
+            console.log(`S3 Key 추출: ${key}`);
+
+            const command = new GetObjectCommand({
+              Bucket: bucketName,
+              Key: key,
+            });
+
+            const s3Response = await this.s3Service.getS3Client().send(command);
+
+            // Stream to Buffer
+            const stream = s3Response.Body as Readable;
+            const chunks: Uint8Array[] = [];
+            for await (const chunk of stream) {
+              chunks.push(chunk);
+            }
+            const buffer = Buffer.concat(chunks);
+
+            // Buffer를 순수 Uint8Array로 변환 (pdfjs-dist 요구사항)
+            data = new Uint8Array(buffer);
+
+            console.log('S3 파일 다운로드 완료.');
+
+          } catch (s3Error) {
+            console.error('S3 다운로드 실패, 일반 HTTP 요청으로 전환:', s3Error);
+            // S3 실패 시 일반 HTTP로 재시도 (Public일 경우)
+            try {
+              const response = await axios.get(filePath, { responseType: 'arraybuffer' });
+              data = new Uint8Array(response.data);
+            } catch (httpError) {
+              throw new Error('PDF 파일을 다운로드할 수 없습니다.');
+            }
+          }
+        } else {
+          // 일반 URL
+          try {
+            console.log('일반 URL 감지됨. 파일 다운로드 중...');
             const response = await axios.get(filePath, { responseType: 'arraybuffer' });
             data = new Uint8Array(response.data);
-          } catch (httpError) {
+            console.log('파일 다운로드 완료.');
+          } catch (downloadError) {
+            console.error('파일 다운로드 실패:', downloadError);
             throw new Error('PDF 파일을 다운로드할 수 없습니다.');
           }
-        }
-      } else {
-        // 일반 URL
-        try {
-          console.log('일반 URL 감지됨. 파일 다운로드 중...');
-          const response = await axios.get(filePath, { responseType: 'arraybuffer' });
-          data = new Uint8Array(response.data);
-          console.log('파일 다운로드 완료.');
-        } catch (downloadError) {
-          console.error('파일 다운로드 실패:', downloadError);
-          throw new Error('PDF 파일을 다운로드할 수 없습니다.');
         }
       }
     }

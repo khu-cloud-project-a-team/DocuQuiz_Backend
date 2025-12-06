@@ -1,4 +1,5 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, OneToMany } from 'typeorm';
+import { PdfChunkEntity } from '../core/pdf-chunk.entity';
 
 @Entity()
 export class FileEntity {
@@ -22,4 +23,7 @@ export class FileEntity {
 
     @CreateDateColumn()
     createdAt: Date;
+
+    @OneToMany(() => PdfChunkEntity, (chunk) => chunk.file)
+    pdfChunks: PdfChunkEntity[];
 }
