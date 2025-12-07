@@ -2,11 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { PdfService } from '../core/pdf.service';
 import { GeminiService, StructuredPdfChunk } from '../core/gemini.service';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { Quiz as QuizEntity, Question as QuestionEntity, QuizResult, UserAnswer } from './quiz.entity';
 import { PdfChunkEntity } from '../core/pdf-chunk.entity';
 import { WrongAnswerNote, WrongAnswerItem } from './wrong-answer-note.entity';
 import { FileEntity } from '../file/file.entity';
+import { User } from '../user/user.entity';
 
 // --- 데이터 형식 정의 ---
 
@@ -68,16 +69,25 @@ export class QuizService {
     private readonly pdfChunkRepository: Repository<PdfChunkEntity>,
   ) { }
 
-  async generateQuiz(fileId: string, options: QuizOptions): Promise<Quiz> {
+  async generateQuiz(fileId: string, options: QuizOptions, user: User): Promise<Quiz> {
     // 파일 조회
-    const sourceFile = await this.fileRepository.findOne({ where: { id: fileId } });
+    const sourceFile = await this.fileRepository.findOne({
+      where: [
+        { id: fileId, user: { id: user.id } },
+        { id: fileId, user: IsNull() }, // fallback for legacy data without user
+      ],
+    });
     if (!sourceFile) {
       throw new Error('파일 정보를 찾을 수 없습니다.');
     }
 
     // 1:1 제약조건: 이미 해당 파일에 대한 퀴즈가 존재하면 기존 퀴즈 반환
     const existingQuiz = await this.quizRepository.findOne({
-      where: { sourceFile: { id: sourceFile.id }, isRegeneratedQuiz: false },
+      where: {
+        sourceFile: { id: sourceFile.id },
+        isRegeneratedQuiz: false,
+        createdBy: { id: user.id },
+      },
       relations: ['questions', 'sourceFile']
     });
 
@@ -138,6 +148,7 @@ export class QuizService {
     const quizToSave = this.quizRepository.create({
       title: finalQuiz.title,
       sourceFile: sourceFile || undefined, // 파일 연결
+      createdBy: user,
       questions: finalQuiz.questions.map(q => ({
         text: q.question,
         type: q.type,
@@ -166,9 +177,9 @@ export class QuizService {
     };
   }
 
-  async getQuiz(id: string): Promise<Quiz> {
+  async getQuiz(id: string, user: User): Promise<Quiz> {
     const quiz = await this.quizRepository.findOne({
-      where: { id },
+      where: { id, createdBy: { id: user.id } },
       relations: ['questions', 'sourceFile'],
     });
 
@@ -201,9 +212,10 @@ export class QuizService {
   async submitQuiz(
     quizId: string,
     answers: { questionId: string; selectedAnswer: string }[],
+    user: User,
   ) {
     const quiz = await this.quizRepository.findOne({
-      where: { id: quizId },
+      where: { id: quizId, createdBy: { id: user.id } },
       relations: ['questions'],
     });
 
@@ -253,6 +265,7 @@ export class QuizService {
       totalQuestions,
       correctQuestions: correctCount,
       answers: userAnswers,
+      user,
     });
 
     await this.quizResultRepository.save(quizResult);
@@ -284,17 +297,20 @@ export class QuizService {
     return await this.wrongAnswerNoteRepository.save(note);
   }
 
-  async regenerateFromWrongAnswerNote(noteId: string): Promise<Quiz> {
+  async regenerateFromWrongAnswerNote(noteId: string, user: User): Promise<Quiz> {
     const note = await this.wrongAnswerNoteRepository.findOne({
       where: { id: noteId },
-      relations: ['items', 'quizResult', 'quizResult.quiz', 'quizResult.quiz.sourceFile']
+      relations: ['items', 'quizResult', 'quizResult.quiz', 'quizResult.quiz.sourceFile', 'quizResult.user']
     });
 
     if (!note) throw new Error('Wrong answer note not found');
+    if (note.quizResult.user && note.quizResult.user.id !== user.id) {
+      throw new Error('권한이 없습니다.');
+    }
 
     // 1:1 제약조건: 이미 해당 오답노트에 대한 재생성 퀴즈가 존재하면 기존 퀴즈 반환
     const existingRegenQuiz = await this.quizRepository.findOne({
-      where: { sourceNoteId: note.id, isRegeneratedQuiz: true },
+      where: { sourceNoteId: note.id, isRegeneratedQuiz: true, createdBy: { id: user.id } },
       relations: ['questions', 'sourceFile']
     });
 
@@ -331,6 +347,7 @@ export class QuizService {
       sourceNoteId: note.id,
       weaknessAnalysis: weaknessAnalysis,
       sourceFile: note.quizResult.quiz.sourceFile,
+      createdBy: user,
       questions: newQuestions.map(q => ({
         text: q.question,
         type: q.type,
@@ -361,9 +378,9 @@ export class QuizService {
     };
   }
 
-  async getQuizResult(id: string) {
+  async getQuizResult(id: string, user: User) {
     const result = await this.quizResultRepository.findOne({
-      where: { id },
+      where: { id, user: { id: user.id } },
       relations: ['quiz', 'quiz.sourceFile', 'answers', 'wrongAnswerNote']
     });
 
@@ -384,13 +401,16 @@ export class QuizService {
     };
   }
 
-  async getWrongAnswerNote(id: string) {
+  async getWrongAnswerNote(id: string, user: User) {
     const note = await this.wrongAnswerNoteRepository.findOne({
       where: { id },
-      relations: ['items', 'quizResult', 'quizResult.quiz']
+      relations: ['items', 'quizResult', 'quizResult.quiz', 'quizResult.user']
     });
 
     if (!note) throw new Error('Wrong answer note not found');
+    if (note.quizResult.user && note.quizResult.user.id !== user.id) {
+      throw new Error('권한이 없습니다.');
+    }
 
     return {
       id: note.id,
@@ -408,19 +428,20 @@ export class QuizService {
     };
   }
 
-  async getStats() {
-    const pdfCount = await this.fileRepository.count();
-    const quizCount = await this.quizRepository.count();
-    const results = await this.quizResultRepository.find();
+  async getStats(user: User) {
+    const pdfCount = await this.fileRepository.count({ where: { user: { id: user.id } } });
+    const quizCount = await this.quizRepository.count({ where: { createdBy: { id: user.id } } });
+    const results = await this.quizResultRepository.find({ where: { user: { id: user.id } } });
     const totalScore = results.reduce((sum, r) => sum + r.score, 0);
     const avgScore = results.length > 0 ? Math.round(totalScore / results.length) : 0;
 
     return { pdfCount, quizCount, avgScore };
   }
 
-  async getAllQuizzes() {
+  async getAllQuizzes(user: User) {
     const quizzes = await this.quizRepository.find({
-      relations: ['sourceFile', 'questions'], // Fixed: Added 'questions' relation
+      where: { createdBy: { id: user.id } },
+      relations: ['sourceFile', 'questions'],
       order: { createdAt: 'DESC' }
     });
 
@@ -434,8 +455,9 @@ export class QuizService {
     }));
   }
 
-  async getAllWrongAnswerNotes() {
+  async getAllWrongAnswerNotes(user: User) {
     return this.wrongAnswerNoteRepository.find({
+      where: { quizResult: { user: { id: user.id } } },
       relations: ['quizResult', 'quizResult.quiz'],
       order: { createdAt: 'DESC' }
     });

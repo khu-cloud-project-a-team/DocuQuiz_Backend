@@ -1,5 +1,7 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, OneToMany } from 'typeorm';
 import { PdfChunkEntity } from '../core/pdf-chunk.entity';
+import { ManyToOne, JoinColumn } from 'typeorm';
+import { User } from '../user/user.entity';
 
 @Entity()
 export class FileEntity {
@@ -26,4 +28,8 @@ export class FileEntity {
 
     @OneToMany(() => PdfChunkEntity, (chunk) => chunk.file)
     pdfChunks: PdfChunkEntity[];
+
+    @ManyToOne(() => User, { nullable: true })
+    @JoinColumn({ name: 'userId' })
+    user: User | null;
 }

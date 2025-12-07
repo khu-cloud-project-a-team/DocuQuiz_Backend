@@ -7,6 +7,7 @@ import { CoreModule } from './core/core.module';
 import { QuizModule } from './quiz/quiz.module';
 import { AwsModule } from './aws/aws.module';
 import { FileModule } from './file/file.module';
+import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { FileModule } from './file/file.module';
     QuizModule,
     AwsModule,
     FileModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],

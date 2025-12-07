@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, OneToOne, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { FileEntity } from '../file/file.entity';
+import { User } from '../user/user.entity';
 
 @Entity()
 export class Quiz {
@@ -27,6 +28,10 @@ export class Quiz {
 
     @OneToMany(() => Question, (question) => question.quiz, { cascade: true })
     questions: Question[];
+
+    @ManyToOne(() => User, { nullable: true })
+    @JoinColumn({ name: 'createdById' })
+    createdBy: User | null;
 }
 
 @Entity()
@@ -83,6 +88,10 @@ export class QuizResult {
 
     @OneToOne('WrongAnswerNote', 'quizResult', { nullable: true })
     wrongAnswerNote: any;
+
+    @ManyToOne(() => User, { nullable: true })
+    @JoinColumn({ name: 'userId' })
+    user: User | null;
 }
 
 @Entity()

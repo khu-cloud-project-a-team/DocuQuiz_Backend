@@ -8,6 +8,9 @@ import { Quiz, Question, QuizResult, UserAnswer } from './quiz.entity';
 import { WrongAnswerNote, WrongAnswerItem } from './wrong-answer-note.entity';
 import { FileEntity } from '../file/file.entity';
 import { PdfChunkEntity } from '../core/pdf-chunk.entity';
+import { User } from '../user/user.entity';
+import { UserModule } from '../user/user.module';
+import { TokenAuthGuard } from '../user/auth.guard';
 
 @Module({
   imports: [
@@ -19,11 +22,13 @@ import { PdfChunkEntity } from '../core/pdf-chunk.entity';
       WrongAnswerNote,
       WrongAnswerItem,
       FileEntity,
-      PdfChunkEntity
+      PdfChunkEntity,
+      User,
     ]),
-    CoreModule
+    CoreModule,
+    UserModule,
   ],
   controllers: [QuizController],
-  providers: [QuizService],
+  providers: [QuizService, TokenAuthGuard],
 })
 export class QuizModule { }

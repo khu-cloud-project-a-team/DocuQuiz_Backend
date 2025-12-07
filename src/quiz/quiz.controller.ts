@@ -1,6 +1,8 @@
-import { Controller, Post, Body, Get, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, UseGuards, Req } from '@nestjs/common';
 import { QuizService, QuizOptions } from './quiz.service';
 import { ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { TokenAuthGuard } from '../user/auth.guard';
+import type { Request } from 'express';
 
 // (임시) DTO 정의 - 나중에 dto/ 폴더로 이동
 class QuizOptionsDto {
@@ -44,6 +46,7 @@ class RegenerateFromNoteDto {
 }
 
 @ApiTags('Quiz')
+@UseGuards(TokenAuthGuard)
 @Controller('quiz') // http://localhost:3000/quiz
 export class QuizController {
   constructor(private readonly quizService: QuizService) { }
@@ -54,9 +57,10 @@ export class QuizController {
   @Post('generate') // POST /quiz/generate
   @ApiOperation({ summary: '퀴즈 생성', description: 'PDF 파일을 기반으로 퀴즈를 생성합니다.' })
   @ApiResponse({ status: 201, description: '퀴즈 생성 성공' })
-  async generateQuiz(@Body() generateQuizDto: GenerateQuizDto) {
+  async generateQuiz(@Body() generateQuizDto: GenerateQuizDto, @Req() req: Request) {
     const { fileId, options } = generateQuizDto;
-    return this.quizService.generateQuiz(fileId, options);
+    const user = (req as any).user;
+    return this.quizService.generateQuiz(fileId, options, user);
   }
 
   /**
@@ -65,8 +69,9 @@ export class QuizController {
   @Post('submit') // POST /quiz/submit
   @ApiOperation({ summary: '퀴즈 제출', description: '퀴즈 답안을 제출하고 채점 결과를 반환합니다. 오답이 있으면 오답노트 ID도 반환합니다.' })
   @ApiResponse({ status: 201, description: '제출 성공 (점수 및 오답노트 ID 반환)' })
-  async submitQuiz(@Body() submitQuizDto: SubmitQuizDto) {
-    return this.quizService.submitQuiz(submitQuizDto.quizId, submitQuizDto.answers);
+  async submitQuiz(@Body() submitQuizDto: SubmitQuizDto, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.quizService.submitQuiz(submitQuizDto.quizId, submitQuizDto.answers, user);
   }
 
   /**
@@ -75,33 +80,38 @@ export class QuizController {
   @Post('regenerate-from-note') // POST /quiz/regenerate-from-note
   @ApiOperation({ summary: '오답노트 기반 재출제', description: '오답노트의 취약점을 분석하여 새로운 퀴즈를 생성합니다.' })
   @ApiResponse({ status: 201, description: '재출제 성공' })
-  async regenerateFromNote(@Body() dto: RegenerateFromNoteDto) {
-    return this.quizService.regenerateFromWrongAnswerNote(dto.noteId);
+  async regenerateFromNote(@Body() dto: RegenerateFromNoteDto, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.quizService.regenerateFromWrongAnswerNote(dto.noteId, user);
   }
 
   @Get('stats') // GET /quiz/stats
   @ApiOperation({ summary: '통계 조회', description: '전체 PDF 수, 퀴즈 수, 평균 점수를 반환합니다.' })
-  async getStats() {
-    return this.quizService.getStats();
+  async getStats(@Req() req: Request) {
+    const user = (req as any).user;
+    return this.quizService.getStats(user);
   }
 
   @Get('wrong-answer-notes') // GET /quiz/wrong-answer-notes
   @ApiOperation({ summary: '오답노트 목록 조회', description: '모든 오답노트 목록을 반환합니다.' })
-  async getWrongAnswerNotes() {
-    return this.quizService.getAllWrongAnswerNotes();
+  async getWrongAnswerNotes(@Req() req: Request) {
+    const user = (req as any).user;
+    return this.quizService.getAllWrongAnswerNotes(user);
   }
 
   @Get() // GET /quiz
   @ApiOperation({ summary: '문제집 목록 조회', description: '생성된 모든 문제집 목록을 반환합니다.' })
-  async getAllQuizzes() {
-    return this.quizService.getAllQuizzes();
+  async getAllQuizzes(@Req() req: Request) {
+    const user = (req as any).user;
+    return this.quizService.getAllQuizzes(user);
   }
 
   @Get(':id') // GET /quiz/:id
   @ApiOperation({ summary: '퀴즈 조회', description: 'ID로 퀴즈를 조회합니다.' })
   @ApiResponse({ status: 200, description: '퀴즈 조회 성공' })
-  async getQuiz(@Param('id') id: string) {
-    return this.quizService.getQuiz(id);
+  async getQuiz(@Param('id') id: string, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.quizService.getQuiz(id, user);
   }
 
   // TODO: GET /quiz/result/:resultId 구현 필요 (상세 결과 조회)
