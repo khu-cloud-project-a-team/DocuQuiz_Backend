@@ -8,11 +8,7 @@ async function bootstrap() {
   // CORS 허용
   app.enableCors({
     credentials: true,
-    origin: [
-      'https://docuquiz.win',       // 기본 도메인
-      'https://www.docuquiz.win',   // www 포함 도메인
-      'http://localhost:3000',      // 로컬 개발용 (필요 시)
-    ],
+    origin: true,
   });
 
 
