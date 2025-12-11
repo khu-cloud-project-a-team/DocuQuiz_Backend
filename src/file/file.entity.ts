@@ -23,6 +23,9 @@ export class FileEntity {
     @Column()
     s3Url: string;
 
+    @Column({ default: false })
+    status: boolean; // PDF 분석 완료 여부
+
     @CreateDateColumn()
     createdAt: Date;
 

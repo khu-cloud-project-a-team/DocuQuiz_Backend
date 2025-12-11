@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FileEntity } from './file.entity';
+import { PdfChunkEntity } from '../core/pdf-chunk.entity';
 import { S3Service } from '../aws/s3.service';
 import { User } from '../user/user.entity';
 
@@ -10,6 +11,8 @@ export class FileService {
     constructor(
         @InjectRepository(FileEntity)
         private readonly fileRepository: Repository<FileEntity>,
+        @InjectRepository(PdfChunkEntity)
+        private readonly pdfChunkRepository: Repository<PdfChunkEntity>,
         private readonly s3Service: S3Service,
     ) { }
 
@@ -45,6 +48,38 @@ export class FileService {
         });
 
         return await this.fileRepository.save(newFile);
+    }
+
+
+    async saveProcessedChunks(
+        s3Key: string,
+        chunks: Array<{ page: number; type: string; content: string }>
+    ): Promise<FileEntity> {
+        const file = await this.fileRepository.findOne({
+            where: { s3Key },
+        });
+
+        if (!file) {
+            throw new Error('File not found');
+        }
+
+        // 청크 데이터를 PdfChunkEntity로 변환하여 저장
+        const pdfChunks = chunks.map(chunk => {
+            const pdfChunk = this.pdfChunkRepository.create({
+                content: chunk.content,
+                type: chunk.type,
+                pageNumber: chunk.page,
+                file: file,
+            });
+            return pdfChunk;
+        });
+
+        // 벌크 저장
+        await this.pdfChunkRepository.save(pdfChunks);
+
+        // 파일 처리 완료 상태 업데이트
+        file.status = true;
+        return await this.fileRepository.save(file);
     }
 
     async findAll(user: User): Promise<FileEntity[]> {
