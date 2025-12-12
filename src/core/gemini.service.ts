@@ -23,7 +23,7 @@ export class GeminiService {
     this.genAI = new GoogleGenerativeAI(apiKey);
     // 퀴즈 생성을 위한 고성능 모델 사용 (JSON 모드 활성화)
     this.model = this.genAI.getGenerativeModel({
-      model: 'gemini-flash-lite-latest',
+      model: 'gemini-2.5-flash-lite',
       generationConfig: { responseMimeType: 'application/json' }
     });
   }
