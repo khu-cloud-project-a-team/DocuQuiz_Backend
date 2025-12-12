@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { createPresignedPost as awsCreatePresignedPost, PresignedPost } from '@aws-sdk/s3-presigned-post';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -62,5 +63,17 @@ export class S3Service {
 
         return { url, fields, key };
     }
-}
 
+    /**
+     * Presigned GET URL 생성
+     * S3 객체를 일정 시간 동안 조회할 수 있는 임시 URL 반환
+     */
+    async getPresignedGetUrl(s3Key: string, expiresIn: number = 3600): Promise<string> {
+        const command = new GetObjectCommand({
+            Bucket: this.bucketName,
+            Key: s3Key,
+        });
+
+        return await getSignedUrl(this.s3Client, command, { expiresIn });
+    }
+}

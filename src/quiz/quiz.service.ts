@@ -8,6 +8,7 @@ import { PdfChunkEntity } from '../core/pdf-chunk.entity';
 import { WrongAnswerNote, WrongAnswerItem } from './wrong-answer-note.entity';
 import { FileEntity } from '../file/file.entity';
 import { User } from '../user/user.entity';
+import { S3Service } from '../aws/s3.service';
 
 // --- 데이터 형식 정의 ---
 
@@ -51,6 +52,7 @@ export class QuizService {
   constructor(
     private readonly pdfService: PdfService,
     private readonly geminiService: GeminiService,
+    private readonly s3Service: S3Service,
     @InjectRepository(QuizEntity)
     private readonly quizRepository: Repository<QuizEntity>,
     @InjectRepository(QuestionEntity)
@@ -232,8 +234,11 @@ export class QuizService {
       return null;
     }
 
+    // Presigned URL 생성 (1시간 유효)
+    const presignedUrl = await this.s3Service.getPresignedGetUrl(quiz.sourceFile.s3Key);
+
     return {
-      url: quiz.sourceFile.s3Url,
+      url: presignedUrl,
       fileName: quiz.sourceFile.originalName,
     };
   }

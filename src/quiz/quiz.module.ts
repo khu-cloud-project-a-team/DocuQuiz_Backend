@@ -11,6 +11,7 @@ import { PdfChunkEntity } from '../core/pdf-chunk.entity';
 import { User } from '../user/user.entity';
 import { UserModule } from '../user/user.module';
 import { TokenAuthGuard } from '../user/auth.guard';
+import { AwsModule } from '../aws/aws.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { TokenAuthGuard } from '../user/auth.guard';
     ]),
     CoreModule,
     UserModule,
+    AwsModule,
   ],
   controllers: [QuizController],
   providers: [QuizService, TokenAuthGuard],
