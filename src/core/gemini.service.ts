@@ -21,8 +21,11 @@ export class GeminiService {
       throw new Error('GEMINI_API_KEY is missing');
     }
     this.genAI = new GoogleGenerativeAI(apiKey);
-    // 퀴즈 생성을 위한 고성능 모델 사용 (User specific preview model)
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    // 퀴즈 생성을 위한 고성능 모델 사용 (JSON 모드 활성화)
+    this.model = this.genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: 'application/json' }
+    });
   }
 
   /**
