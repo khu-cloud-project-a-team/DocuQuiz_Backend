@@ -585,11 +585,21 @@ export class QuizService {
     `;
 
     try {
+      console.log('[DEBUG] Gemini API 호출 시작...');
       const responseText = await this.geminiService.generateContent(prompt);
+      console.log('[DEBUG] Gemini API 응답 받음. 길이:', responseText?.length || 0);
+      console.log('[DEBUG] 응답 내용 (처음 500자):', responseText?.substring(0, 500));
+
       const jsonText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(jsonText);
+      console.log('[DEBUG] 마크다운 제거 후 (처음 500자):', jsonText.substring(0, 500));
+
+      const parsed = JSON.parse(jsonText);
+      console.log('[DEBUG] 파싱 성공! 문항 개수:', Array.isArray(parsed) ? parsed.length : 'Not an array');
+      return parsed;
     } catch (e) {
-      console.error('JSON 파싱 실패:', e);
+      console.error('[ERROR] 퀴즈 생성 중 오류 발생:', e);
+      console.error('[ERROR] 에러 상세:', e.message);
+      console.error('[ERROR] 스택 트레이스:', e.stack);
       return [];
     }
   }
