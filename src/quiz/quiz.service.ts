@@ -91,7 +91,8 @@ export class QuizService {
       relations: ['questions', 'sourceFile']
     });
 
-    if (existingQuiz) {
+    // 1:1 제약조건: 이미 해당 파일에 대한 퀴즈가 존재하면 기존 퀴즈 반환 (단, 문제가 있는 경우에만)
+    if (existingQuiz && existingQuiz.questions && existingQuiz.questions.length > 0) {
       console.log(`[Constraint] 기존 퀴즈 반환 (ID: ${existingQuiz.id})`);
       return {
         id: existingQuiz.id,
@@ -138,6 +139,10 @@ export class QuizService {
     console.log('[Phase 3] 퀴즈 검증 시작...');
     const verifiedQuestionBank = await this._validateQuestions(rawQuestionBank);
     console.log(`[Phase 3] 완료. 검증된 문항 ${verifiedQuestionBank.length}개 확보.`);
+
+    if (verifiedQuestionBank.length === 0) {
+      throw new Error('퀴즈 생성에 실패했습니다. (생성된 문항 없음) 잠시 후 다시 시도해주세요.');
+    }
 
     console.log('[Phase 4] 퀴즈 패키징 시작...');
     const finalQuiz = this._packageQuiz(verifiedQuestionBank, options, generatedTitle);
