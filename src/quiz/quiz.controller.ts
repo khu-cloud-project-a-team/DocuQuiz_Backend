@@ -114,6 +114,14 @@ export class QuizController {
     return this.quizService.getQuiz(id, user);
   }
 
+  @Get(':id/pdf') // GET /quiz/:id/pdf
+  @ApiOperation({ summary: '원문 PDF 조회', description: '퀴즈에 연결된 원문 PDF URL을 반환합니다.' })
+  @ApiResponse({ status: 200, description: '원문 PDF 정보 반환 성공' })
+  async getQuizPdf(@Param('id') id: string, @Req() req: Request) {
+    const user = (req as any).user;
+    return this.quizService.getQuizPdf(id, user);
+  }
+
   // TODO: GET /quiz/result/:resultId 구현 필요 (상세 결과 조회)
   // TODO: GET /wrong-answer-note/:noteId 구현 필요 (오답노트 조회)
 }

@@ -218,6 +218,26 @@ export class QuizService {
     };
   }
 
+  async getQuizPdf(id: string, user: User): Promise<{ url: string; fileName: string } | null> {
+    const quiz = await this.quizRepository.findOne({
+      where: { id, createdBy: { id: user.id } },
+      relations: ['sourceFile'],
+    });
+
+    if (!quiz) {
+      throw new Error('Quiz not found');
+    }
+
+    if (!quiz.sourceFile) {
+      return null;
+    }
+
+    return {
+      url: quiz.sourceFile.s3Url,
+      fileName: quiz.sourceFile.originalName,
+    };
+  }
+
   async submitQuiz(
     quizId: string,
     answers: { questionId: string; selectedAnswer: string }[],
