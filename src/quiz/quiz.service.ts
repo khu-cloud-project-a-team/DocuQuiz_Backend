@@ -81,7 +81,11 @@ export class QuizService {
       throw new Error('파일 정보를 찾을 수 없습니다.');
     }
 
-    // 1:1 제약조건: 이미 해당 파일에 대한 퀴즈가 존재하면 기존 퀴즈 반환
+    /* 
+    // [Modifed] 1:1 제약조건 제거: 사용자가 원할 때마다 새로운 퀴즈 생성
+    // 기존에는 하나의 파일에 대해 하나의 퀴즈만 존재하도록 제한했으나,
+    // 반복 학습을 위해 계속해서 새로운 퀴즈를 생성할 수 있도록 변경함.
+    
     const existingQuiz = await this.quizRepository.findOne({
       where: {
         sourceFile: { id: sourceFile.id },
@@ -91,7 +95,6 @@ export class QuizService {
       relations: ['questions', 'sourceFile']
     });
 
-    // 1:1 제약조건: 이미 해당 파일에 대한 퀴즈가 존재하면 기존 퀴즈 반환 (단, 문제가 있는 경우에만)
     if (existingQuiz && existingQuiz.questions && existingQuiz.questions.length > 0) {
       console.log(`[Constraint] 기존 퀴즈 반환 (ID: ${existingQuiz.id})`);
       return {
@@ -109,6 +112,7 @@ export class QuizService {
         })),
       };
     }
+    */
 
     console.log('[Phase 1] DB에서 구조화된 청크 조회 중...');
 
