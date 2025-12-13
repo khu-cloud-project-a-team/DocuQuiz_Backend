@@ -35,15 +35,14 @@ export class FileService {
      * 클라이언트가 S3 업로드 완료 후 호출하여 파일 메타데이터를 DB에 저장
      */
     async confirmUpload(fileName: string, s3Key: string, mimeType: string, size: number, user: User): Promise<FileEntity> {
-        const bucketName = this.s3Service.getBucketName();
-        const s3Url = `https://${bucketName}.s3.ap-northeast-2.amazonaws.com/${s3Key}`;
+        const cdnUrl = `https://cdn.docuquiz.win/${s3Key}`
 
         const newFile = this.fileRepository.create({
             originalName: fileName,
             mimeType: mimeType,
             size: size,
             s3Key: s3Key,
-            s3Url: s3Url,
+            s3Url: cdnUrl,
             user: user || null,
         });
 
