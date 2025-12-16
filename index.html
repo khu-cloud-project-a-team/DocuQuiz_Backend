@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocuQuiz 통합 테스트</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #2c3e50;
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .active-screen {
+            display: block;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+
+        .stats-container {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            flex: 1;
+            margin: 0 10px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-secondary {
+            background-color: #95a5a6;
+        }
+
+        .btn-secondary:hover {
+            background-color: #7f8c8d;
+        }
+
+        .btn-success {
+            background-color: #27ae60;
+        }
+
+        .btn-success:hover {
+            background-color: #2ecc71;
+        }
+
+        .list-group {
+            list-style: none;
+            padding: 0;
+        }
+
+        .list-item {
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .question-card {
+            background: #fff;
+            border: 1px solid #e1e4e8;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            background: #34495e;
+            margin-bottom: 10px;
+        }
+
+        .loader {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            z-index: 9999;
+            text-align: center;
+            padding-top: 200px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .weakness-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="loader" class="loader">⏳ 처리 중입니다...</div>
+
+    <!-- 메인 화면 -->
+    <div id="mainScreen" class="screen active-screen">
+        <h1>🎓 DocuQuiz 대시보드</h1>
+
+        <div class="stats-container">
+            <div class="stat-box">
+                <div>업로드한 PDF</div>
+                <div class="stat-value" id="statPdfCount">-</div>
+            </div>
+            <div class="stat-box">
+                <div>생성한 문제집</div>
+                <div class="stat-value" id="statQuizCount">-</div>
+            </div>
+            <div class="stat-box">
+                <div>평균 점수</div>
+                <div class="stat-value" id="statAvgScore">-</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📂 PDF 파일 업로드</h2>
+            <input type="file" id="pdfFile" accept=".pdf">
+            <button class="btn" onclick="uploadFile()">업로드</button>
+        </div>
+
+        <div class="card">
+            <h2>📄 PDF 목록</h2>
+            <ul id="pdfList" class="list-group">
+                <!-- PDF 목록이 여기에 표시됨 -->
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>❌ 오답노트 목록</h2>
+            <ul id="noteList" class="list-group">
+                <!-- 오답노트 목록이 여기에 표시됨 -->
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>📝 생성된 문제집 목록</h2>
+            <ul id="quizList" class="list-group">
+                <!-- 문제집 목록이 여기에 표시됨 -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- 퀴즈 생성 화면 -->
+    <div id="quizGenScreen" class="screen">
+        <h1>📝 퀴즈 생성 설정</h1>
+        <div class="card">
+            <h3>선택된 파일: <span id="selectedFileName"></span></h3>
+            <input type="hidden" id="selectedFilePath">
+
+            <div style="margin: 15px 0;">
+                <label>문항 수: <input type="number" id="qCount" value="3" min="1" max="10"></label>
+            </div>
+
+            <div style="margin: 15px 0;">
+                <label>난이도:
+                    <select id="difficulty">
+                        <option value="쉬움">쉬움</option>
+                        <option value="보통" selected>보통</option>
+                        <option value="어려움">어려움</option>
+                    </select>
+                </label>
+            </div>
+
+            <div style="margin: 15px 0;">
+                <label>유형:
+                    <label><input type="checkbox" class="qType" value="객관식" checked> 객관식</label>
+                    <label><input type="checkbox" class="qType" value="OX" checked> OX</label>
+                    <label><input type="checkbox" class="qType" value="주관식"> 주관식</label>
+                    <label><input type="checkbox" class="qType" value="빈칸"> 빈칸</label>
+                </label>
+            </div>
+
+            <button class="btn" onclick="generateQuiz()">퀴즈 생성하기</button>
+            <button class="btn btn-secondary" onclick="showScreen('mainScreen')">취소</button>
+        </div>
+    </div>
+
+    <!-- 퀴즈 풀이 화면 -->
+    <div id="quizSolveScreen" class="screen">
+        <h1 id="quizTitleDisplay">📝 퀴즈 풀기</h1>
+        <div id="weaknessDisplay" class="weakness-box" style="display:none;"></div>
+
+        <div id="questionsContainer"></div>
+
+        <button class="btn btn-success" onclick="submitQuiz()" style="width: 100%; margin-top: 20px;">결과 제출</button>
+        <button class="btn btn-secondary" onclick="showScreen('mainScreen')"
+            style="width: 100%; margin-top: 10px;">나가기</button>
+    </div>
+
+    <!-- 결과 화면 -->
+    <div id="resultScreen" class="screen">
+        <h1>🎉 퀴즈 결과</h1>
+        <div class="card" style="text-align: center;">
+            <h2 id="resultScore">0점</h2>
+            <p>맞은 개수: <span id="resultCorrect">0</span> / <span id="resultTotal">0</span></p>
+            <div id="pdfLinkContainer" style="margin: 20px 0;">
+                <!-- PDF 링크 -->
+            </div>
+
+            <button class="btn" id="regenBtn" onclick="regenerateFromNote()" style="display:none;">오답 기반 문제 재생성</button>
+            <button class="btn btn-secondary" onclick="showScreen('mainScreen')">메인으로 돌아가기</button>
+        </div>
+    </div>
+
+    <script>
+        // 전역 상태
+        let currentQuizId = null;
+        let currentQuestions = [];
+        let userAnswers = {};
+        let currentWrongAnswerNoteId = null;
+
+        // 초기화
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStats();
+            loadPdfList();
+            loadNoteList();
+            loadQuizList();
+        });
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(el => el.classList.remove('active-screen'));
+            document.getElementById(screenId).classList.add('active-screen');
+
+            if (screenId === 'mainScreen') {
+                loadStats();
+                loadPdfList();
+                loadNoteList();
+                loadQuizList();
+            }
+        }
+
+        function setLoading(isLoading) {
+            document.getElementById('loader').style.display = isLoading ? 'block' : 'none';
+        }
+
+        // --- API 호출 함수들 ---
+
+        async function loadStats() {
+            try {
+                const res = await fetch('http://localhost:3000/quiz/stats');
+                const data = await res.json();
+                document.getElementById('statPdfCount').innerText = data.pdfCount;
+                document.getElementById('statQuizCount').innerText = data.quizCount;
+                document.getElementById('statAvgScore').innerText = data.avgScore + '점';
+            } catch (e) {
+                console.error('통계 로드 실패', e);
+            }
+        }
+
+        async function loadPdfList() {
+            try {
+                const res = await fetch('http://localhost:3000/file');
+                const files = await res.json();
+                const list = document.getElementById('pdfList');
+                list.innerHTML = '';
+                files.forEach(file => {
+                    const li = document.createElement('li');
+                    li.className = 'list-item';
+                    li.innerHTML = `
+                        <span>📄 ${file.originalName}</span>
+                        <button class="btn" onclick="openQuizGen('${file.s3Url}', '${file.originalName}')">문제 출제</button>
+                    `;
+                    list.appendChild(li);
+                });
+            } catch (e) {
+                console.error('파일 목록 로드 실패', e);
+            }
+        }
+
+        async function loadNoteList() {
+            try {
+                const res = await fetch('http://localhost:3000/quiz/wrong-answer-notes');
+                const notes = await res.json();
+                const list = document.getElementById('noteList');
+                list.innerHTML = '';
+                notes.forEach(note => {
+                    const li = document.createElement('li');
+                    li.className = 'list-item';
+                    li.innerHTML = `
+                        <span>❌ ${note.title} (${new Date(note.createdAt).toLocaleDateString()})</span>
+                        <button class="btn" onclick="regenerateFromNoteId('${note.id}')">복습 퀴즈 생성</button>
+                    `;
+                    list.appendChild(li);
+                });
+            } catch (e) {
+                console.error('오답노트 목록 로드 실패', e);
+            }
+        }
+
+        async function loadQuizList() {
+            try {
+                const res = await fetch('http://localhost:3000/quiz');
+                const quizzes = await res.json();
+                const list = document.getElementById('quizList');
+                list.innerHTML = '';
+                quizzes.forEach(quiz => {
+                    const li = document.createElement('li');
+                    li.className = 'list-item';
+                    li.innerHTML = `
+                        <span>📝 ${quiz.title} (${new Date(quiz.createdAt).toLocaleDateString()}) - ${quiz.questionCount}문제</span>
+                        <button class="btn" onclick="fetchAndStartQuiz('${quiz.id}')">풀기</button>
+                    `;
+                    list.appendChild(li);
+                });
+            } catch (e) {
+                console.error('문제집 목록 로드 실패', e);
+            }
+        }
+
+        async function uploadFile() {
+            const fileInput = document.getElementById('pdfFile');
+            if (!fileInput.files[0]) return alert('파일을 선택하세요');
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            setLoading(true);
+            try {
+                const res = await fetch('http://localhost:3000/file/upload', { method: 'POST', body: formData });
+                if (res.ok) {
+                    alert('업로드 성공');
+                    loadPdfList();
+                    loadStats();
+                    fileInput.value = '';
+                } else {
+                    alert('업로드 실패');
+                }
+            } catch (e) {
+                alert('에러: ' + e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function openQuizGen(filePath, fileName) {
+            document.getElementById('selectedFileName').innerText = fileName;
+            document.getElementById('selectedFilePath').value = filePath;
+            showScreen('quizGenScreen');
+        }
+
+        async function generateQuiz() {
+            const filePath = document.getElementById('selectedFilePath').value;
+            const qCount = document.getElementById('qCount').value;
+            const difficulty = document.getElementById('difficulty').value;
+            const types = Array.from(document.querySelectorAll('.qType:checked')).map(cb => cb.value);
+
+            if (types.length === 0) return alert('유형을 선택하세요');
+
+            setLoading(true);
+            try {
+                const res = await fetch('http://localhost:3000/quiz/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filePath,
+                        options: { questionCount: parseInt(qCount), types, difficulty }
+                    })
+                });
+                const data = await res.json();
+
+                if (data.id) {
+                    startQuiz(data);
+                } else {
+                    alert('퀴즈 생성 실패');
+                }
+            } catch (e) {
+                alert('에러: ' + e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function startQuiz(quizData) {
+            currentQuizId = quizData.id;
+            currentQuestions = quizData.questions;
+            userAnswers = {};
+
+            document.getElementById('quizTitleDisplay').innerText = `📝 ${quizData.title}`;
+
+            // 취약점 분석 표시 (재생성 퀴즈인 경우)
+            const weaknessDiv = document.getElementById('weaknessDisplay');
+            if (quizData.weaknessAnalysis) {
+                weaknessDiv.style.display = 'block';
+                weaknessDiv.innerText = `💡 취약점 분석:\n${quizData.weaknessAnalysis}`;
+            } else {
+                weaknessDiv.style.display = 'none';
+            }
+
+            renderQuestions(currentQuestions);
+            showScreen('quizSolveScreen');
+        }
+
+        async function fetchAndStartQuiz(quizId) {
+            setLoading(true);
+            try {
+                const res = await fetch(`http://localhost:3000/quiz/${quizId}`);
+                const quizData = await res.json();
+                startQuiz(quizData);
+            } catch (e) {
+                alert('퀴즈 로드 실패: ' + e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function renderQuestions(questions) {
+            const container = document.getElementById('questionsContainer');
+            container.innerHTML = '';
+
+            questions.forEach((q, idx) => {
+                const div = document.createElement('div');
+                div.className = 'question-card';
+                div.id = `card-${q.id}`;
+
+                let inputHtml = '';
+                if (q.options && q.options.length > 0) {
+                    q.options.forEach(opt => {
+                        inputHtml += `<label style="display:block; margin: 5px 0;"><input type="radio" name="q_${q.id}" value="${opt}"> ${opt}</label>`;
+                    });
+                } else if (q.type === 'OX') {
+                    inputHtml += `<label><input type="radio" name="q_${q.id}" value="O"> O</label> `;
+                    inputHtml += `<label><input type="radio" name="q_${q.id}" value="X"> X</label>`;
+                } else {
+                    inputHtml += `<input type="text" id="input_${q.id}" style="width:100%; padding:8px;" placeholder="답을 입력하세요">`;
+                }
+
+                div.innerHTML = `
+                    <span class="badge">${q.type}</span>
+                    <h3>Q${idx + 1}. ${q.question}</h3>
+                    <div id="input-area-${q.id}">${inputHtml}</div>
+                    <button class="btn" id="btn-check-${q.id}" onclick="checkAnswer('${q.id}')" style="margin-top:10px; padding: 5px 10px;">정답 확인</button>
+                    <div id="feedback-${q.id}" style="display:none; margin-top:15px; padding:10px; border-radius:5px;"></div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function checkAnswer(qId) {
+            const q = currentQuestions.find(item => item.id === qId);
+            let val = null;
+
+            if (q.type === '객관식' || q.type === 'OX') {
+                const checked = document.querySelector(`input[name="q_${qId}"]:checked`);
+                if (checked) val = checked.value;
+            } else {
+                const input = document.getElementById(`input_${qId}`);
+                if (input) val = input.value;
+            }
+
+            if (!val) return alert('답을 입력/선택해주세요');
+
+            // 정답 확인 로직
+            const isCorrect = val.trim().toLowerCase() === q.answer.trim().toLowerCase();
+
+            // UI 업데이트
+            const feedbackDiv = document.getElementById(`feedback-${qId}`);
+            feedbackDiv.style.display = 'block';
+
+            if (isCorrect) {
+                feedbackDiv.style.backgroundColor = '#d4edda';
+                feedbackDiv.style.color = '#155724';
+                feedbackDiv.innerHTML = `<strong>✅ 정답입니다!</strong>`;
+            } else {
+                feedbackDiv.style.backgroundColor = '#f8d7da';
+                feedbackDiv.style.color = '#721c24';
+                feedbackDiv.innerHTML = `<strong>❌ 오답입니다.</strong><br>정답: ${q.answer}<br><br>📝 <strong>해설:</strong> ${q.explanation}`;
+            }
+
+            // 입력 및 버튼 비활성화 (수정 불가)
+            document.getElementById(`btn-check-${qId}`).disabled = true;
+            document.getElementById(`btn-check-${qId}`).style.display = 'none';
+
+            if (q.type === '객관식' || q.type === 'OX') {
+                document.querySelectorAll(`input[name="q_${qId}"]`).forEach(el => el.disabled = true);
+            } else {
+                document.getElementById(`input_${qId}`).disabled = true;
+            }
+
+            // 답안 저장
+            userAnswers[qId] = val;
+        }
+
+        async function submitQuiz() {
+            // 풀지 않은 문제 확인
+            const unanswered = currentQuestions.filter(q => !userAnswers[q.id]);
+            if (unanswered.length > 0) {
+                alert(`아직 풀지 않은 문제가 ${unanswered.length}개 있습니다. 모든 문제를 풀고 정답 확인을 해주세요.`);
+                return;
+            }
+
+            setLoading(true);
+            try {
+                const answersPayload = Object.keys(userAnswers).map(qId => ({
+                    questionId: qId,
+                    selectedAnswer: userAnswers[qId]
+                }));
+
+                const res = await fetch('http://localhost:3000/quiz/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quizId: currentQuizId, answers: answersPayload })
+                });
+                const result = await res.json();
+
+                // 결과 화면 표시
+                document.getElementById('resultScore').innerText = `${result.score}점`;
+                document.getElementById('resultCorrect').innerText = result.correctQuestions;
+                document.getElementById('resultTotal').innerText = result.totalQuestions;
+
+                // 오답노트 버튼 처리
+                const regenBtn = document.getElementById('regenBtn');
+                if (result.wrongAnswerNoteId) {
+                    currentWrongAnswerNoteId = result.wrongAnswerNoteId;
+                    regenBtn.style.display = 'inline-block';
+                    regenBtn.disabled = false; // 버튼 활성화
+                    regenBtn.innerText = '오답 기반 문제 재생성';
+                } else {
+                    currentWrongAnswerNoteId = null;
+                    regenBtn.style.display = 'none';
+                }
+
+                showScreen('resultScreen');
+
+            } catch (e) {
+                alert('제출 실패: ' + e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function regenerateFromNote() {
+            if (!currentWrongAnswerNoteId) return;
+
+            // 버튼 비활성화 (중복 클릭 방지)
+            const regenBtn = document.getElementById('regenBtn');
+            regenBtn.disabled = true;
+            regenBtn.innerText = '생성 중...';
+
+            setLoading(true);
+            try {
+                const res = await fetch('http://localhost:3000/quiz/regenerate-from-note', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ noteId: currentWrongAnswerNoteId })
+                });
+                const data = await res.json();
+
+                if (data.id) {
+                    startQuiz(data);
+                } else {
+                    alert('재생성 실패');
+                    regenBtn.disabled = false;
+                    regenBtn.innerText = '오답 기반 문제 재생성';
+                }
+            } catch (e) {
+                alert('에러: ' + e.message);
+                regenBtn.disabled = false;
+                regenBtn.innerText = '오답 기반 문제 재생성';
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function regenerateFromNoteId(noteId) {
+            setLoading(true);
+            try {
+                const res = await fetch('http://localhost:3000/quiz/regenerate-from-note', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ noteId })
+                });
+                const data = await res.json();
+
+                if (data.id) {
+                    startQuiz(data);
+                } else {
+                    alert('재생성 실패');
+                }
+            } catch (e) {
+                alert('에러: ' + e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+    </script>
+</body>
+
+</html>
