@@ -45,7 +45,7 @@ export class Question {
     @Column()
     type: string; // '객관식', '주관식', 'OX', '빈칸'
 
-    @Column('simple-json', { nullable: true })
+    @Column('simple-array', { nullable: true })
     options: string[]; // 객관식 보기
 
     @Column()
