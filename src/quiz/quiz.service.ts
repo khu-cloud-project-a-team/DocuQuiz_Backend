@@ -27,6 +27,7 @@ export interface RawQuestion {
   answer: string;
   explanation: string;
   source_context: string;
+  is_correct?: boolean | null; // 사용자가 맞췄는지 여부 (null: 아직 안 풂)
 }
 
 export interface Quiz {
@@ -198,6 +199,13 @@ export class QuizService {
       throw new Error('Quiz not found');
     }
 
+    // 해당 퀴즈의 가장 최근 결과 조회 (사용자 답안 포함)
+    const latestResult = await this.quizResultRepository.findOne({
+      where: { quiz: { id: quiz.id }, user: { id: user.id } },
+      relations: ['answers'],
+      order: { createdAt: 'DESC' }
+    });
+
     return {
       id: quiz.id,
       title: quiz.title,
@@ -207,16 +215,22 @@ export class QuizService {
         url: quiz.sourceFile.s3Url,
         fileName: quiz.sourceFile.originalName
       } : undefined,
-      questions: quiz.questions.map(q => ({
-        id: q.id,
-        page: 0,
-        type: q.type as any,
-        question: q.text,
-        options: q.options,
-        answer: q.answer,
-        explanation: q.explanation,
-        source_context: q.sourceContext,
-      })),
+      questions: quiz.questions.map(q => {
+        // 해당 문제에 대한 사용자 답안 찾기
+        const userAnswer = latestResult?.answers.find(a => a.questionId === q.id);
+
+        return {
+          id: q.id,
+          page: 0,
+          type: q.type as any,
+          question: q.text,
+          options: q.options,
+          answer: q.answer,
+          explanation: q.explanation,
+          source_context: q.sourceContext,
+          is_correct: userAnswer?.isCorrect ?? null, // 풀지 않았으면 null
+        };
+      }),
     };
   }
 
